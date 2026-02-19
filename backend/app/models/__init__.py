@@ -9,6 +9,15 @@ from app.models.investment_account import (
     InvestmentHolding,
     InvestmentHistory,
 )
+from app.models.payment import (
+    Payment,
+    PaymentType,
+    PaymentFrequency,
+    PaymentStatus,
+    PaymentCategory,
+    PaymentOccurrence,
+    RecurringPaymentOverride,
+)
 
 __all__ = [
     "Base",
@@ -20,4 +29,11 @@ __all__ = [
     "InvestmentAccountType",
     "InvestmentHolding",
     "InvestmentHistory",
+    "Payment",
+    "PaymentType",
+    "PaymentFrequency",
+    "PaymentStatus",
+    "PaymentCategory",
+    "PaymentOccurrence",
+    "RecurringPaymentOverride",
 ]

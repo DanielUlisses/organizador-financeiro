@@ -134,3 +134,4 @@ See [docs/PLANNING.md](docs/PLANNING.md) for the development roadmap.
 - **Agent instructions**: [AGENTS.md](AGENTS.md)
 - **PostgreSQL troubleshooting**: `.cursor/skills/postgresql-troubleshoot/`
 - **MCP config**: Copy `docs/mcp-config.example.json` to your Cursor MCP config and adjust the connection URL.
+- **Test Agent**: The repository includes a custom test-agent subagent (via `mcp_task`) that can automatically run pytest test suites. The vitest-runner MCP server is available but not configured since this project uses pytest, not vitest.

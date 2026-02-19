@@ -2,10 +2,12 @@
 import pytest
 import uuid
 from decimal import Decimal
+from datetime import date, timedelta
 from app.models.user import User
 from app.models.bank_account import BankAccount, AccountType
 from app.models.credit_card import CreditCard
 from app.models.investment_account import InvestmentAccount, InvestmentAccountType, InvestmentHolding, InvestmentHistory
+from app.models.payment import PaymentType, PaymentFrequency, PaymentStatus
 from app.schemas.user import UserCreate, UserUpdate
 from app.schemas.bank_account import BankAccountCreate, BankAccountUpdate
 from app.schemas.credit_card import CreditCardCreate, CreditCardUpdate
@@ -15,6 +17,14 @@ from app.schemas.investment_account import (
     InvestmentHoldingCreate,
     InvestmentHistoryCreate,
 )
+from app.schemas.payment import (
+    OneTimePaymentCreate,
+    RecurringPaymentCreate,
+    PaymentUpdate,
+    PaymentOccurrenceCreate,
+    PaymentOccurrenceUpdate,
+    RecurringPaymentOverrideCreate,
+)
 from app.services.user_service import UserService
 from app.services.bank_account_service import BankAccountService
 from app.services.credit_card_service import CreditCardService
@@ -23,6 +33,7 @@ from app.services.investment_account_service import (
     InvestmentHoldingService,
     InvestmentHistoryService,
 )
+from app.services.payment_service import PaymentService
 
 
 @pytest.mark.unit
@@ -299,3 +310,154 @@ class TestInvestmentAccountService:
 
         total = InvestmentAccountService.get_total_value(db, user.id)
         assert total == Decimal("15000.00")
+
+
+@pytest.mark.unit
+class TestPaymentService:
+    """Test PaymentService"""
+
+    def test_create_one_time_payment(self, db):
+        """Test creating a one-time payment"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = OneTimePaymentCreate(
+            description="Test Payment",
+            amount=Decimal("100.00"),
+            due_date=date.today()
+        )
+        payment = PaymentService.create_one_time_payment(db, user.id, payment_data)
+
+        assert payment.id is not None
+        assert payment.user_id == user.id
+        assert payment.payment_type == PaymentType.ONE_TIME
+        assert payment.description == "Test Payment"
+        assert payment.amount == Decimal("100.00")
+        assert payment.status == PaymentStatus.PENDING
+
+    def test_create_recurring_payment(self, db):
+        """Test creating a recurring payment"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = RecurringPaymentCreate(
+            description="Monthly Subscription",
+            amount=Decimal("29.99"),
+            frequency=PaymentFrequency.MONTHLY,
+            start_date=date.today()
+        )
+        payment = PaymentService.create_recurring_payment(db, user.id, payment_data)
+
+        assert payment.id is not None
+        assert payment.payment_type == PaymentType.RECURRING
+        assert payment.frequency == PaymentFrequency.MONTHLY
+        assert payment.start_date == date.today()
+        assert payment.next_due_date is not None
+
+    def test_get_payment(self, db):
+        """Test getting a payment"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = OneTimePaymentCreate(
+            description="Test",
+            amount=Decimal("50.00")
+        )
+        payment = PaymentService.create_one_time_payment(db, user.id, payment_data)
+
+        retrieved = PaymentService.get_payment(db, payment.id, user.id)
+        assert retrieved is not None
+        assert retrieved.id == payment.id
+
+    def test_update_payment(self, db):
+        """Test updating a payment"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = OneTimePaymentCreate(
+            description="Old Description",
+            amount=Decimal("50.00")
+        )
+        payment = PaymentService.create_one_time_payment(db, user.id, payment_data)
+
+        update_data = PaymentUpdate(description="New Description", amount=Decimal("75.00"))
+        updated = PaymentService.update_payment(db, payment.id, user.id, update_data)
+
+        assert updated.description == "New Description"
+        assert updated.amount == Decimal("75.00")
+
+    def test_delete_payment(self, db):
+        """Test deleting a payment"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = OneTimePaymentCreate(
+            description="Test",
+            amount=Decimal("50.00")
+        )
+        payment = PaymentService.create_one_time_payment(db, user.id, payment_data)
+        payment_id = payment.id
+
+        success = PaymentService.delete_payment(db, payment_id, user.id)
+        assert success is True
+
+        deleted = PaymentService.get_payment(db, payment_id, user.id)
+        assert deleted is None
+
+    def test_create_payment_occurrence(self, db):
+        """Test creating a payment occurrence"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = RecurringPaymentCreate(
+            description="Test",
+            amount=Decimal("100.00"),
+            frequency=PaymentFrequency.MONTHLY,
+            start_date=date.today()
+        )
+        payment = PaymentService.create_recurring_payment(db, user.id, payment_data)
+
+        occurrence_data = PaymentOccurrenceCreate(
+            scheduled_date=date.today() + timedelta(days=30),
+            due_date=date.today() + timedelta(days=30),
+            amount=Decimal("100.00")
+        )
+        occurrence = PaymentService.create_payment_occurrence(
+            db, payment.id, user.id, occurrence_data
+        )
+
+        assert occurrence is not None
+        assert occurrence.payment_id == payment.id
+
+    def test_create_recurring_override(self, db):
+        """Test creating a recurring payment override"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        payment_data = RecurringPaymentCreate(
+            description="Test",
+            amount=Decimal("100.00"),
+            frequency=PaymentFrequency.MONTHLY,
+            start_date=date.today()
+        )
+        payment = PaymentService.create_recurring_payment(db, user.id, payment_data)
+
+        override_data = RecurringPaymentOverrideCreate(
+            override_type="skip",
+            effective_date=date.today(),
+            target_date=date.today() + timedelta(days=30)
+        )
+        override = PaymentService.create_recurring_override(
+            db, payment.id, user.id, override_data
+        )
+
+        assert override is not None
+        assert override.payment_id == payment.id
+        assert override.override_type == "skip"
