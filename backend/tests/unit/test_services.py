@@ -7,7 +7,14 @@ from app.models.user import User
 from app.models.bank_account import BankAccount, AccountType
 from app.models.credit_card import CreditCard
 from app.models.investment_account import InvestmentAccount, InvestmentAccountType, InvestmentHolding, InvestmentHistory
-from app.models.payment import PaymentType, PaymentFrequency, PaymentStatus
+from app.models.payment import (
+    Payment,
+    PaymentCategory,
+    PaymentOccurrence,
+    PaymentType,
+    PaymentFrequency,
+    PaymentStatus,
+)
 from app.schemas.user import UserCreate, UserUpdate
 from app.schemas.bank_account import BankAccountCreate, BankAccountUpdate
 from app.schemas.credit_card import CreditCardCreate, CreditCardUpdate
@@ -34,6 +41,7 @@ from app.services.investment_account_service import (
     InvestmentHistoryService,
 )
 from app.services.payment_service import PaymentService
+from app.services.reports_service import ReportsService
 
 
 @pytest.mark.unit
@@ -237,6 +245,94 @@ class TestCreditCardService:
 
         total = CreditCardService.get_total_credit_limit(db, user.id)
         assert total == Decimal("8000.00")
+
+    def test_get_invoice_cycle(self, db):
+        """Test invoice cycle calculation and due date handling"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        card = CreditCard(
+            user_id=user.id,
+            name="Card",
+            credit_limit=Decimal("5000.00"),
+            invoice_close_day=15,
+            payment_due_day=20,
+        )
+        db.add(card)
+        db.commit()
+
+        cycle = CreditCardService.get_invoice_cycle(db, card.id, user.id, date(2026, 2, 10))
+        assert cycle is not None
+        assert cycle["cycle_start_date"] == date(2026, 1, 16)
+        assert cycle["cycle_end_date"] == date(2026, 2, 15)
+        assert cycle["due_date"] == date(2026, 3, 7)
+
+    def test_get_statement_summary(self, db):
+        """Test statement generation / summary"""
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        card = CreditCard(
+            user_id=user.id,
+            name="Card",
+            credit_limit=Decimal("5000.00"),
+            invoice_close_day=15,
+            payment_due_day=20,
+        )
+        db.add(card)
+        db.commit()
+
+        charge = Payment(
+            user_id=user.id,
+            payment_type=PaymentType.ONE_TIME,
+            description="Online purchase",
+            amount=Decimal("120.00"),
+            from_account_type="credit_card",
+            from_account_id=card.id,
+            status=PaymentStatus.PROCESSED,
+        )
+        db.add(charge)
+        db.flush()
+        db.add(
+            PaymentOccurrence(
+                payment_id=charge.id,
+                scheduled_date=date(2026, 2, 1),
+                due_date=date(2026, 2, 1),
+                amount=Decimal("120.00"),
+                status=PaymentStatus.PROCESSED,
+            )
+        )
+
+        payment = Payment(
+            user_id=user.id,
+            payment_type=PaymentType.ONE_TIME,
+            description="Card payment",
+            amount=Decimal("70.00"),
+            to_account_type="credit_card",
+            to_account_id=card.id,
+            status=PaymentStatus.PROCESSED,
+        )
+        db.add(payment)
+        db.flush()
+        db.add(
+            PaymentOccurrence(
+                payment_id=payment.id,
+                scheduled_date=date(2026, 2, 2),
+                due_date=date(2026, 2, 2),
+                amount=Decimal("70.00"),
+                status=PaymentStatus.PROCESSED,
+            )
+        )
+        db.commit()
+
+        summary = CreditCardService.get_statement_summary(db, card.id, user.id, date(2026, 2, 10))
+        assert summary is not None
+        assert summary["transaction_count"] == 2
+        assert summary["charges_total"] == Decimal("120.00")
+        assert summary["payments_total"] == Decimal("70.00")
+        assert summary["statement_balance"] == Decimal("50.00")
 
 
 @pytest.mark.unit
@@ -461,3 +557,95 @@ class TestPaymentService:
         assert override is not None
         assert override.payment_id == payment.id
         assert override.override_type == "skip"
+
+
+@pytest.mark.unit
+class TestReportsService:
+    """Test ReportsService"""
+
+    def test_expense_breakdown(self, db):
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        db.add_all(
+            [
+                Payment(
+                    user_id=user.id,
+                    payment_type=PaymentType.ONE_TIME,
+                    description="Salary",
+                    amount=Decimal("2000.00"),
+                    category=PaymentCategory.INCOME,
+                    due_date=date(2026, 2, 1),
+                    status=PaymentStatus.PROCESSED,
+                ),
+                Payment(
+                    user_id=user.id,
+                    payment_type=PaymentType.ONE_TIME,
+                    description="Rent",
+                    amount=Decimal("900.00"),
+                    category=PaymentCategory.EXPENSE,
+                    due_date=date(2026, 2, 2),
+                    status=PaymentStatus.PROCESSED,
+                ),
+            ]
+        )
+        db.commit()
+
+        report = ReportsService.get_expense_breakdown(
+            db,
+            user.id,
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 28),
+            breakdown_by="category",
+        )
+        assert report["total_expenses"] == Decimal("900.00")
+        assert len(report["items"]) == 1
+        assert report["items"][0]["label"] == "expense"
+
+    def test_income_vs_expenses(self, db):
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
+        db.add(user)
+        db.commit()
+
+        recurring = Payment(
+            user_id=user.id,
+            payment_type=PaymentType.RECURRING,
+            description="Subscription",
+            amount=Decimal("50.00"),
+            category=PaymentCategory.SUBSCRIPTION,
+            status=PaymentStatus.PROCESSED,
+        )
+        income = Payment(
+            user_id=user.id,
+            payment_type=PaymentType.ONE_TIME,
+            description="Bonus",
+            amount=Decimal("500.00"),
+            category=PaymentCategory.INCOME,
+            due_date=date(2026, 2, 5),
+            status=PaymentStatus.PROCESSED,
+        )
+        db.add_all([recurring, income])
+        db.flush()
+        db.add(
+            PaymentOccurrence(
+                payment_id=recurring.id,
+                scheduled_date=date(2026, 2, 7),
+                due_date=date(2026, 2, 7),
+                amount=Decimal("50.00"),
+                status=PaymentStatus.PROCESSED,
+            )
+        )
+        db.commit()
+
+        report = ReportsService.get_income_vs_expenses(
+            db,
+            user.id,
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 28),
+            granularity="month",
+        )
+        assert report["total_income"] == Decimal("500.00")
+        assert report["total_expenses"] == Decimal("50.00")
+        assert report["net"] == Decimal("450.00")
+        assert report["series"][0]["period"] == "2026-02"

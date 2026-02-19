@@ -3,8 +3,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from decimal import Decimal
+from datetime import date
 from app.db import get_db
-from app.schemas.credit_card import CreditCardCreate, CreditCardUpdate, CreditCardResponse
+from app.schemas.credit_card import (
+    CreditCardCreate,
+    CreditCardUpdate,
+    CreditCardResponse,
+    CreditCardInvoiceCycleResponse,
+    CreditCardStatementResponse,
+)
 from app.services.credit_card_service import CreditCardService
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
@@ -73,3 +80,29 @@ def delete_credit_card(card_id: int, user_id: int, db: Session = Depends(get_db)
     if not success:
         raise HTTPException(status_code=404, detail="Credit card not found")
     return None
+
+
+@router.get("/{card_id}/invoice-cycle", response_model=CreditCardInvoiceCycleResponse)
+def get_invoice_cycle(
+    card_id: int, user_id: int, reference_date: date = date.today(), db: Session = Depends(get_db)
+):
+    """Get invoice cycle dates and due date for a card."""
+    cycle = CreditCardService.get_invoice_cycle(db, card_id, user_id, reference_date)
+    if not cycle:
+        raise HTTPException(status_code=404, detail="Credit card not found")
+    return {
+        "card_id": card_id,
+        "reference_date": reference_date,
+        **cycle,
+    }
+
+
+@router.get("/{card_id}/statement-summary", response_model=CreditCardStatementResponse)
+def get_statement_summary(
+    card_id: int, user_id: int, reference_date: date = date.today(), db: Session = Depends(get_db)
+):
+    """Get statement summary for the invoice cycle containing reference_date."""
+    summary = CreditCardService.get_statement_summary(db, card_id, user_id, reference_date)
+    if not summary:
+        raise HTTPException(status_code=404, detail="Credit card not found")
+    return summary

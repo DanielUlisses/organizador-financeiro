@@ -26,13 +26,14 @@ app.include_router(health.router)
 app.include_router(auth.router)
 
 # Import and include domain routes
-from app.api.routes import users, bank_accounts, credit_cards, investment_accounts, payments
+from app.api.routes import users, bank_accounts, credit_cards, investment_accounts, payments, reports
 
 app.include_router(users.router)
 app.include_router(bank_accounts.router)
 app.include_router(credit_cards.router)
 app.include_router(investment_accounts.router)
 app.include_router(payments.router)
+app.include_router(reports.router)
 
 # Note: better-auth will be integrated on the frontend side
 # Backend will validate sessions via cookies/JWT tokens

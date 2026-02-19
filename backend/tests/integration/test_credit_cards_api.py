@@ -2,8 +2,10 @@
 import pytest
 import uuid
 from decimal import Decimal
+from datetime import date
 from app.models.user import User
 from app.models.credit_card import CreditCard
+from app.models.payment import Payment, PaymentOccurrence, PaymentType, PaymentStatus
 
 
 @pytest.mark.integration
@@ -175,3 +177,91 @@ class TestCreditCardsAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["total_credit_limit"] == 8000.00
+
+    def test_get_invoice_cycle(self, client, user, db_session):
+        """Test invoice close date logic + due date handling endpoint"""
+        card = CreditCard(
+            user_id=user.id,
+            name="Card 1",
+            credit_limit=Decimal("5000.00"),
+            invoice_close_day=15,
+            payment_due_day=20,
+        )
+        db_session.add(card)
+        db_session.commit()
+
+        response = client.get(
+            f"/credit-cards/{card.id}/invoice-cycle?user_id={user.id}&reference_date=2026-02-10"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cycle_start_date"] == "2026-01-16"
+        assert data["cycle_end_date"] == "2026-02-15"
+        assert data["close_date"] == "2026-02-15"
+        assert data["due_date"] == "2026-03-07"
+
+    def test_get_statement_summary(self, client, user, db_session):
+        """Test statement generation / summary endpoint"""
+        card = CreditCard(
+            user_id=user.id,
+            name="Card 1",
+            credit_limit=Decimal("5000.00"),
+            invoice_close_day=15,
+            payment_due_day=20,
+        )
+        db_session.add(card)
+        db_session.commit()
+        db_session.refresh(card)
+
+        charge = Payment(
+            user_id=user.id,
+            payment_type=PaymentType.ONE_TIME,
+            description="Restaurant",
+            amount=Decimal("100.00"),
+            from_account_type="credit_card",
+            from_account_id=card.id,
+            status=PaymentStatus.PROCESSED,
+        )
+        db_session.add(charge)
+        db_session.flush()
+        db_session.add(
+            PaymentOccurrence(
+                payment_id=charge.id,
+                scheduled_date=date(2026, 2, 3),
+                due_date=date(2026, 2, 3),
+                amount=Decimal("100.00"),
+                status=PaymentStatus.PROCESSED,
+            )
+        )
+
+        payment = Payment(
+            user_id=user.id,
+            payment_type=PaymentType.ONE_TIME,
+            description="Payment",
+            amount=Decimal("40.00"),
+            to_account_type="credit_card",
+            to_account_id=card.id,
+            status=PaymentStatus.PROCESSED,
+        )
+        db_session.add(payment)
+        db_session.flush()
+        db_session.add(
+            PaymentOccurrence(
+                payment_id=payment.id,
+                scheduled_date=date(2026, 2, 7),
+                due_date=date(2026, 2, 7),
+                amount=Decimal("40.00"),
+                status=PaymentStatus.PROCESSED,
+            )
+        )
+        db_session.commit()
+
+        response = client.get(
+            f"/credit-cards/{card.id}/statement-summary?user_id={user.id}&reference_date=2026-02-10"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["transaction_count"] == 2
+        assert float(data["charges_total"]) == 100.00
+        assert float(data["payments_total"]) == 40.00
+        assert float(data["statement_balance"]) == 60.00

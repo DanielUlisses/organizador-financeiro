@@ -42,16 +42,16 @@
 
 ## Phase 4: Credit Card Workflows
 
-- [ ] Invoice close date logic
-- [ ] Payment due date handling
-- [ ] Statement generation / summary
+- [x] Invoice close date logic
+- [x] Payment due date handling
+- [x] Statement generation / summary
 
 ## Phase 5: Reports & Analytics
 
-- [ ] Chart library integration (e.g. Recharts)
-- [ ] Expense breakdown by category/time
-- [ ] Income vs expenses
-- [ ] Professional report layout
+- [x] Chart library integration (e.g. Recharts)
+- [x] Expense breakdown by category/time
+- [x] Income vs expenses
+- [x] Professional report layout
 
 ## Phase 6: Polish & Deployment
 

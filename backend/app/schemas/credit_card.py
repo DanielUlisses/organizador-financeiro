@@ -1,7 +1,7 @@
 """Credit card schemas"""
 from pydantic import BaseModel, Field
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, date
+from typing import Optional, List
 from decimal import Decimal
 
 
@@ -43,3 +43,38 @@ class CreditCardResponse(CreditCardBase):
 
     class Config:
         from_attributes = True
+
+
+class CreditCardInvoiceCycleResponse(BaseModel):
+    card_id: int
+    reference_date: date
+    cycle_start_date: date
+    cycle_end_date: date
+    close_date: date
+    due_date: date
+
+
+class CreditCardStatementTransactionResponse(BaseModel):
+    payment_id: int
+    occurrence_id: Optional[int] = None
+    description: str
+    amount: Decimal
+    signed_amount: Decimal
+    transaction_date: date
+    status: str
+    direction: str
+
+
+class CreditCardStatementResponse(BaseModel):
+    card_id: int
+    user_id: int
+    reference_date: date
+    cycle_start_date: date
+    cycle_end_date: date
+    close_date: date
+    due_date: date
+    transaction_count: int
+    charges_total: Decimal
+    payments_total: Decimal
+    statement_balance: Decimal
+    transactions: List[CreditCardStatementTransactionResponse]
