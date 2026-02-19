@@ -13,15 +13,15 @@
 | Dev | PostgreSQL container |
 | Prod | Docker containers |
 
-## Phase 1: Skeleton & Infrastructure
+## Phase 1: Skeleton & Infrastructure ✅
 
-- [ ] Project structure (monorepo or separate backend/frontend)
-- [ ] Docker Compose for local PostgreSQL
-- [ ] Backend: FastAPI or Flask app skeleton
-- [ ] Frontend: Vite + React + shadcn/ui + Tailwind setup
-- [ ] Alembic initialization
-- [ ] better-auth integration
-- [ ] Basic health/status endpoints
+- [x] Project structure (monorepo or separate backend/frontend)
+- [x] Docker Compose for local PostgreSQL
+- [x] Backend: FastAPI or Flask app skeleton
+- [x] Frontend: Vite + React + shadcn/ui + Tailwind setup
+- [x] Alembic initialization
+- [x] better-auth integration (structure ready, frontend integration pending)
+- [x] Basic health/status endpoints
 
 ## Phase 2: Core Domain Models
 

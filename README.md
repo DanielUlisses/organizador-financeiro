@@ -4,16 +4,128 @@ Web application to help users organize their finances. Single user per deploymen
 
 ## Tech Stack
 
-- **Backend**: Python (SQLAlchemy, Alembic)
-- **Frontend**: React + shadcn/ui + Tailwind CSS
-- **Auth**: better-auth
+- **Backend**: Python (FastAPI, SQLAlchemy, Alembic)
+- **Frontend**: React + TypeScript + Vite + shadcn/ui + Tailwind CSS
+- **Auth**: better-auth (frontend integration, backend session validation)
 - **Database**: PostgreSQL 18
-- **Dev**: Local PostgreSQL container
+- **Dev**: Local PostgreSQL container via Docker Compose
 - **Prod**: Docker containers
 
 ## Getting Started
 
-*Skeleton setup in progress. See [docs/PLANNING.md](docs/PLANNING.md) for the development roadmap.*
+### Prerequisites
+
+- Python 3.12+
+- Node.js 20+
+- Docker and Docker Compose
+- PostgreSQL 18 (via Docker)
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd organizador-financeiro
+   ```
+
+2. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Start PostgreSQL database**
+   ```bash
+   docker-compose -f docker/docker-compose.yml up -d
+   ```
+
+4. **Set up backend**
+   ```bash
+   cd backend
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+5. **Run database migrations**
+   ```bash
+   cd backend
+   alembic upgrade head
+   ```
+
+6. **Start backend server**
+   ```bash
+   cd backend
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+7. **Set up frontend**
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+8. **Start frontend development server**
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+9. **Access the application**
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
+
+## Project Structure
+
+```
+organizador-financeiro/
+├── backend/           # FastAPI backend
+│   ├── app/          # Application code
+│   │   ├── api/      # API routes
+│   │   ├── services/ # Business logic
+│   │   ├── models/   # SQLAlchemy models
+│   │   └── db/       # Database setup
+│   ├── alembic/      # Database migrations
+│   └── requirements.txt
+├── frontend/         # React frontend
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── lib/
+│   └── package.json
+├── docker/           # Docker Compose configuration
+└── docs/             # Documentation
+```
+
+## Development
+
+### Backend
+
+- Run migrations: `alembic revision --autogenerate -m "description"`
+- Apply migrations: `alembic upgrade head`
+- Run tests: `pytest` (when tests are added)
+
+### Frontend
+
+- Install dependencies: `npm install`
+- Run dev server: `npm run dev`
+- Build for production: `npm run build`
+- Preview production build: `npm run preview`
+
+## Phase 1 Status
+
+✅ Project structure (monorepo)
+✅ Docker Compose for PostgreSQL
+✅ Backend skeleton (FastAPI)
+✅ Frontend skeleton (Vite + React + shadcn/ui + Tailwind)
+✅ Alembic initialization
+✅ better-auth integration structure (frontend-side, backend validation placeholder)
+✅ Health/status endpoints
+
+## Next Steps
+
+See [docs/PLANNING.md](docs/PLANNING.md) for the development roadmap.
 
 ## Cursor / Agent Configuration
 
