@@ -26,15 +26,16 @@ export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) 
         onClick={onCloseMobile}
       />
       <aside
-        className={`fixed left-0 top-0 z-40 h-screen border-r bg-card transition-all md:static md:z-auto ${
+        className={`fixed left-0 top-0 z-40 h-screen border-r bg-card/95 transition-all md:static md:z-auto ${
           collapsed ? 'w-20' : 'w-64'
         } ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
         data-testid="sidebar-root"
         data-collapsed={collapsed ? 'true' : 'false'}
       >
         <div className="flex h-14 items-center border-b px-3">
-          <div className="truncate text-sm font-semibold">{collapsed ? 'OF' : 'Organizador Financeiro'}</div>
+          <div className="truncate text-sm font-semibold tracking-tight">{collapsed ? 'OF' : 'Organizador Financeiro'}</div>
         </div>
+        <div className="px-3 pt-3 text-[10px] uppercase tracking-wide text-muted-foreground">{collapsed ? 'Nav' : 'Navigation'}</div>
         <nav className="space-y-1 p-2">
           {links.map((link) => (
             <NavLink
@@ -43,7 +44,9 @@ export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) 
               onClick={onCloseMobile}
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-                  isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+                  isActive
+                    ? 'bg-primary/10 text-primary border border-primary/20'
+                    : 'text-muted-foreground hover:bg-accent'
                 }`
               }
             >

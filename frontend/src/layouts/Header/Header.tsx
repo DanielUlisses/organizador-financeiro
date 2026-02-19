@@ -29,6 +29,13 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
         <h1 className="text-sm font-semibold md:text-base">Organizador Financeiro</h1>
+        <div className="ml-2 hidden w-72 items-center rounded-md border bg-card px-3 py-1.5 md:flex">
+          <input
+            type="text"
+            placeholder="Search"
+            className="w-full border-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

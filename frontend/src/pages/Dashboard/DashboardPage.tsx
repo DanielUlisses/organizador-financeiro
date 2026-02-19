@@ -18,7 +18,6 @@ import { ChartCard } from '@/components/common/ChartCard'
 import { KpiCard } from '@/components/common/KpiCard'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
 import { SectionHeader } from '@/components/common/SectionHeader'
-import { Button } from '@/components/ui/button'
 import {
   buildBalanceTrend,
   buildBudgets,
@@ -65,7 +64,7 @@ const percentFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits:
 
 export function DashboardPage() {
   const { currentMonth } = useMonthContext()
-  const [userId, setUserId] = useState(1)
+  const userId = 1
   const [loading, setLoading] = useState(false)
   const [fatalError, setFatalError] = useState<string | null>(null)
 
@@ -199,7 +198,7 @@ export function DashboardPage() {
   useEffect(() => {
     void loadReports()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, dateRange.start, dateRange.end])
+  }, [dateRange.start, dateRange.end])
 
   const totalIncome = incomeVsExpenses?.total_income ?? 0
   const totalExpenses = incomeVsExpenses?.total_expenses ?? 0
@@ -214,35 +213,12 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-card p-5">
+      <div className="rounded-xl border bg-card p-5 shadow-sm">
         <SectionHeader
           title="Dashboard"
           subtitle="Monthly financial overview with balances, budgets, and performance indicators"
           actions={<MonthNavigator />}
         />
-      </div>
-
-      <div className="card rounded-lg border bg-card p-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <label htmlFor="userId" className="text-sm font-medium">
-            User ID
-          </label>
-          <input
-            id="userId"
-            type="number"
-            min={1}
-            value={userId}
-            onChange={(e) => setUserId(Number(e.target.value) || 1)}
-            className="w-24 rounded border bg-background px-3 py-2"
-          />
-          <Button variant="outline" onClick={() => void loadReports()}>
-            Reload
-          </Button>
-        </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Range: {dateRange.start} to {dateRange.end}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">API: {API_BASE_URL}</p>
       </div>
 
       {loading && <p className="mb-2 text-sm text-muted-foreground">Loading dashboard data...</p>}
@@ -258,10 +234,13 @@ export function DashboardPage() {
           label="Current balance"
           value={reportsState === 'success' ? currencyFormatter.format(currentBalance) : '--'}
           hint={`Month net (${dateRange.start} to ${dateRange.end})`}
+          className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white border-0"
+          labelClassName="text-indigo-100"
+          hintClassName="text-indigo-100/90"
           backgroundChart={
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={balanceTrend}>
-                <Area type="monotone" dataKey="balance" stroke="#3b5bff" fill="#93c5fd" strokeWidth={2} />
+                <Area type="monotone" dataKey="balance" stroke="#dbeafe" fill="#93c5fd" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           }
@@ -269,7 +248,10 @@ export function DashboardPage() {
         <KpiCard
           label="Monthly income"
           value={reportsState === 'success' ? currencyFormatter.format(totalIncome) : '--'}
-          accentClassName="text-green-600"
+          accentClassName="text-white"
+          className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white border-0"
+          labelClassName="text-cyan-100"
+          hintClassName="text-cyan-100/90"
         />
         <KpiCard
           label="Monthly expenses"
@@ -302,7 +284,7 @@ export function DashboardPage() {
                   <XAxis dataKey="name" hide={accounts.length > 4} />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="balance" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="balance" fill="#5b8def" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -323,7 +305,7 @@ export function DashboardPage() {
                   <XAxis dataKey="name" hide={creditCards.length > 4} />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="current_balance" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="current_balance" fill="#9163ff" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -2,19 +2,17 @@
 
 ## Overview
 
-This repository uses **pytest** for Python backend testing, not vitest (which is for JavaScript/TypeScript). The available test MCP servers and agents are:
+This repository uses:
 
-1. **vitest-runner MCP** - Available but not applicable (for JS/TS projects)
-2. **test-agent subagent** - Available via `mcp_task` tool, designed for this repository
-3. **pytest MCP server** - Can be configured (optional)
+- **pytest** for backend (Python)
+- **vitest** for frontend (React/TypeScript)
 
-## Why vitest-runner MCP is Not Used
+The available automated validation tools are:
 
-The `vitest-runner` MCP server is available in Cursor but is **not configured** in this repository because:
-
-- This project uses **pytest** (Python), not **vitest** (JavaScript/TypeScript)
-- The vitest-runner MCP is designed for frontend JavaScript/TypeScript projects
-- Our backend tests are written in Python using pytest
+1. **user-vitest-runner MCP tools** for frontend tests/coverage
+2. **user-eslint-lint-files MCP tool** for frontend lint validation
+3. **test-agent subagent** for phase-level validation
+4. **pytest MCP server** (optional) for backend-focused test workflows
 
 ## Available Test Tools
 
@@ -42,7 +40,30 @@ mcp_task(
 - Suggests MCP servers for test-driven development
 - Proactively runs tests when features are considered complete
 
-### 2. Pytest MCP Server (Optional)
+### 2. Frontend MCP Tools (Vitest + ESLint)
+
+If `user-vitest-runner-run-vitest` fails with:
+
+- `Project directory does not exist: /Users/<your-username>/path/to/your/project/root`
+
+you need to update the MCP server config with the real project path.
+
+Required values for this repository:
+
+- **Project root:** `/home/daniel/repos/daniel/organizador-financeiro`
+- **Frontend working directory:** `/home/daniel/repos/daniel/organizador-financeiro/frontend`
+- **ESLint config file:** `/home/daniel/repos/daniel/organizador-financeiro/frontend/.eslintrc.cjs`
+
+Recommended checks after updating config:
+
+1. `user-vitest-runner-ping`
+2. `user-vitest-runner-run-vitest`
+3. `user-vitest-runner-run-vitest-coverage`
+4. `user-eslint-lint-files` with changed frontend files
+
+If `user-eslint-lint-files` says `Could not find config file`, point it to the frontend directory/config above.
+
+### 3. Pytest MCP Server (Optional)
 
 A pytest MCP server (`@kieranlal/mcp_pytest_service`) can be configured to provide pytest integration. This is **optional** and has been added to `docs/mcp-config.example.json`.
 
@@ -56,9 +77,10 @@ A pytest MCP server (`@kieranlal/mcp_pytest_service`) can be configured to provi
 
 The repository uses:
 
-- **pytest** for Python backend tests
+- **pytest** backend tests (`make test`, `make test-unit`, `make test-integration`, `make test-coverage`)
+- **vitest** frontend tests (`npm run test`, `npm run test:coverage` in `frontend/`)
+- **eslint** frontend lint checks (`npm run lint` in `frontend/`)
 - **Test database**: `organizador_financeiro_test`
-- **Test commands**: Available via Makefile (`make test`, `make test-unit`, `make test-integration`, `make test-coverage`)
 
 ## Why Test-Agent Isn't Always Used
 
@@ -85,9 +107,10 @@ Or simply ask: "Run the test suite" or "Run tests with coverage"
 
 ## Summary
 
-- ✅ **test-agent subagent**: Available and recommended for this repository
-- ❌ **vitest-runner MCP**: Not applicable (wrong test framework)
+- ✅ **test-agent subagent**: Available and recommended for phase validation
+- ✅ **user-vitest-runner MCP**: Applicable for frontend tests
+- ✅ **user-eslint-lint-files**: Applicable for frontend lint checks
 - ⚙️ **pytest MCP server**: Optional, can be configured if needed
-- 📝 **Manual pytest**: Always available via `make test` commands
+- 📝 **Manual commands**: Always available if MCP path/config is temporarily broken
 
 The test-agent is the primary automated testing tool for this repository and should be used proactively when features are complete.

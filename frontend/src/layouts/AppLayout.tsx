@@ -17,7 +17,9 @@ export function AppLayout() {
           onToggleCollapsed={() => setCollapsed((current) => !current)}
         />
         <main className="flex-1 p-4 md:p-6">
-          <Outlet />
+          <div className="mx-auto w-full max-w-[1400px]">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
