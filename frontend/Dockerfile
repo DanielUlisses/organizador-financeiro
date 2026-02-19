@@ -11,6 +11,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Build the application
 RUN npm run build
 
@@ -19,9 +22,7 @@ FROM nginx:alpine
 
 # Copy built files to nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx configuration (optional)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

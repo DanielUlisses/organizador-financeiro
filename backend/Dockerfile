@@ -15,8 +15,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Runtime defaults for production
+ENV BACKEND_RELOAD=false
+ENV UVICORN_WORKERS=2
+
 # Expose port
 EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS}"]

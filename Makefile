@@ -1,4 +1,4 @@
-.PHONY: help setup-backend setup-frontend setup-db start-db stop-db createdb migrate-up migrate-down start-backend start-frontend install
+.PHONY: help setup-backend setup-frontend setup-db start-db stop-db createdb migrate-up migrate-down start-backend start-frontend install prod-build prod-up prod-down prod-logs
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -87,3 +87,15 @@ start-frontend: ## Start frontend development server
 
 install: setup-backend setup-frontend setup-db ## Full setup: backend, frontend, and database
 	@echo "Setup complete! Run 'make start-backend' and 'make start-frontend' in separate terminals."
+
+prod-build: ## Build production Docker images
+	docker-compose -f docker/docker-compose.prod.yml build
+
+prod-up: ## Start production stack (frontend, backend, postgres)
+	docker-compose -f docker/docker-compose.prod.yml up -d
+
+prod-down: ## Stop production stack
+	docker-compose -f docker/docker-compose.prod.yml down
+
+prod-logs: ## Tail production stack logs
+	docker-compose -f docker/docker-compose.prod.yml logs -f

@@ -114,6 +114,30 @@ organizador-financeiro/
 - Build for production: `npm run build`
 - Preview production build: `npm run preview`
 
+## Production Deployment
+
+Use Docker Compose production stack:
+
+```bash
+cp .env.example .env
+# update secrets and ports in .env
+make prod-build
+make prod-up
+```
+
+Services:
+- Frontend: `http://localhost:8080` (or `FRONTEND_PORT`)
+- Backend: `http://localhost:8000` (or `BACKEND_PORT`)
+- Postgres: internal container network
+
+To stop:
+
+```bash
+make prod-down
+```
+
+Full deployment guide: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+
 ## Phase 1 Status
 
 ✅ Project structure (monorepo)

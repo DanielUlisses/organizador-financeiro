@@ -44,6 +44,8 @@ type IncomeVsExpensesResponse = {
   series: IncomeSeriesPoint[]
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
 function App() {
   const [userId, setUserId] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -65,7 +67,7 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const base = `http://localhost:8000/reports`
+      const base = `${API_BASE_URL}/reports`
       const [expenseRes, incomeRes] = await Promise.all([
         fetch(
           `${base}/expense-breakdown?user_id=${userId}&start_date=${dateRange.start}&end_date=${dateRange.end}&breakdown_by=category`,
@@ -97,9 +99,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold mb-2">Organizador Financeiro</h1>
-        <p className="text-muted-foreground mb-8">Phase 5 - Reports & Analytics</p>
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-8 rounded-xl border bg-card p-6">
+          <h1 className="text-4xl font-bold mb-2">Organizador Financeiro</h1>
+          <p className="text-muted-foreground">Phase 6 - Production-ready Analytics Dashboard</p>
+        </div>
 
         <div className="card p-6 bg-card rounded-lg border mb-6">
           <div className="flex items-center gap-3">
@@ -121,10 +125,32 @@ function App() {
           <p className="text-xs text-muted-foreground mt-2">
             Range: {dateRange.start} to {dateRange.end}
           </p>
+          <p className="text-xs text-muted-foreground mt-1">API: {API_BASE_URL}</p>
         </div>
 
         {loading && <p className="text-sm text-muted-foreground mb-4">Loading analytics...</p>}
         {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="rounded-lg border bg-card p-4">
+            <p className="text-xs uppercase text-muted-foreground">Total Income</p>
+            <p className="text-2xl font-semibold text-green-600">
+              {incomeVsExpenses?.total_income?.toFixed(2) ?? '0.00'}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <p className="text-xs uppercase text-muted-foreground">Total Expenses</p>
+            <p className="text-2xl font-semibold text-red-500">
+              {incomeVsExpenses?.total_expenses?.toFixed(2) ?? '0.00'}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card p-4">
+            <p className="text-xs uppercase text-muted-foreground">Net</p>
+            <p className="text-2xl font-semibold">
+              {incomeVsExpenses?.net?.toFixed(2) ?? '0.00'}
+            </p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="card p-6 bg-card rounded-lg border">
@@ -154,15 +180,7 @@ function App() {
 
           <div className="card p-6 bg-card rounded-lg border">
             <h2 className="text-xl font-semibold mb-2">Income vs Expenses</h2>
-            <p className="text-sm text-muted-foreground mb-1">
-              Income: {incomeVsExpenses?.total_income?.toFixed(2) ?? '0.00'}
-            </p>
-            <p className="text-sm text-muted-foreground mb-1">
-              Expenses: {incomeVsExpenses?.total_expenses?.toFixed(2) ?? '0.00'}
-            </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Net: {incomeVsExpenses?.net?.toFixed(2) ?? '0.00'}
-            </p>
+            <p className="text-sm text-muted-foreground mb-4">Monthly cashflow comparison</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={incomeVsExpenses?.series ?? []}>
