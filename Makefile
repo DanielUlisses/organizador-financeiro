@@ -33,6 +33,18 @@ migrate-down: ## Rollback last migration
 migrate-create: ## Create a new migration (usage: make migrate-create MESSAGE="description")
 	cd backend && alembic revision --autogenerate -m "$(MESSAGE)"
 
+test: ## Run all tests
+	cd backend && pytest tests/ -v
+
+test-unit: ## Run unit tests only
+	cd backend && pytest tests/unit/ -v
+
+test-integration: ## Run integration tests only
+	cd backend && pytest tests/integration/ -v
+
+test-coverage: ## Run tests with coverage report
+	cd backend && pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html
+
 start-backend: ## Start backend development server
 	cd backend && python run.py
 

@@ -23,12 +23,15 @@
 - [x] better-auth integration (structure ready, frontend integration pending)
 - [x] Basic health/status endpoints
 
-## Phase 2: Core Domain Models
+## Phase 2: Core Domain Models ✅
 
-- [ ] **Bank accounts**: CRUD, balance tracking
-- [ ] **Credit cards**: Model with invoice close date, payment date
-- [ ] **Investment accounts**: Basic structure
-- [ ] User model (single-user per deployment)
+- [x] **Bank accounts**: CRUD, balance tracking
+- [x] **Credit cards**: Model with invoice close date, payment date
+- [x] **Investment accounts**: Extended structure (holdings, history, performance)
+- [x] User model (single-user per deployment)
+- [x] Unit tests for all models and services
+- [x] Integration tests for all API endpoints
+- [x] Database migration
 
 ## Phase 3: Payments
 
