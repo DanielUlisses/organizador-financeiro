@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Pencil, Trash2 } from 'lucide-react'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
@@ -696,7 +696,7 @@ export function AccountsPage() {
       {notice ? <p className="text-sm text-emerald-600">{notice}</p> : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Account balance health" subtitle="Running balance and cumulative expenses">
+        <ChartCard title="Account balance health" subtitle="Running balance and daily expenses">
           {runningBalanceSeries.length === 0 ? (
             <p className="text-sm text-muted-foreground">No transactions in this month for selected account.</p>
           ) : (
@@ -708,13 +708,35 @@ export function AccountsPage() {
                       <stop offset="5%" stopColor={CHART_THEME.series.balance} stopOpacity={0.5} />
                       <stop offset="95%" stopColor={CHART_THEME.series.balance} stopOpacity={0.05} />
                     </linearGradient>
+                    <linearGradient id="account-expenses-gradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_THEME.series.expenses} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={CHART_THEME.series.expenses} stopOpacity={0.05} />
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis />
-                  <Tooltip formatter={(value: number | string) => currency.format(Number(value))} />
-                  <Area type="monotone" dataKey="balance" stroke={CHART_THEME.series.balance} fill="url(#account-balance-gradient)" />
-                  <Line type="monotone" dataKey="cumulativeExpenses" stroke={CHART_THEME.series.expenses} strokeWidth={2} dot={false} name="Expenses" />
+                  <Tooltip
+                    formatter={(value: number | string, name: string) => [
+                      currency.format(Number(value)),
+                      name === 'balance' ? 'Balance' : 'Daily expenses',
+                    ]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="balance"
+                    stroke={CHART_THEME.series.balance}
+                    fill="url(#account-balance-gradient)"
+                    name="Balance"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="dailyExpenses"
+                    stroke={CHART_THEME.series.expenses}
+                    fill="url(#account-expenses-gradient)"
+                    strokeWidth={2}
+                    name="Daily expenses"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -727,14 +749,36 @@ export function AccountsPage() {
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={cashflowSeries}>
+                <AreaChart data={cashflowSeries}>
+                  <defs>
+                    <linearGradient id="account-inflow-gradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_THEME.series.inflow} stopOpacity={0.28} />
+                      <stop offset="95%" stopColor={CHART_THEME.series.inflow} stopOpacity={0.04} />
+                    </linearGradient>
+                    <linearGradient id="account-outflow-gradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_THEME.series.outflow} stopOpacity={0.28} />
+                      <stop offset="95%" stopColor={CHART_THEME.series.outflow} stopOpacity={0.04} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currency.format(Number(value))} />
-                  <Bar dataKey="inflow" fill={CHART_THEME.series.inflow} radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="outflow" fill={CHART_THEME.series.outflow} radius={[6, 6, 0, 0]} />
-                </BarChart>
+                  <Area
+                    type="monotone"
+                    dataKey="inflow"
+                    stroke={CHART_THEME.series.inflow}
+                    fill="url(#account-inflow-gradient)"
+                    strokeWidth={2}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="outflow"
+                    stroke={CHART_THEME.series.outflow}
+                    fill="url(#account-outflow-gradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           )}

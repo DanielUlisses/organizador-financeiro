@@ -35,14 +35,36 @@ export const buildRunningBalanceSeries = (
   const sorted = [...payments].sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
   let rolling = openingBalance
   let cumulativeExpenses = 0
-  return sorted.map((payment, index) => {
+  const daily = new Map<
+    string,
+    {
+      label: string
+      balance: number
+      cumulativeExpenses: number
+      dailyExpenses: number
+    }
+  >()
+
+  for (let index = 0; index < sorted.length; index += 1) {
+    const payment = sorted[index]
     const signed = getSignedAmount(payment, accountId)
     rolling += signed
-    if (signed < 0) cumulativeExpenses += Math.abs(signed)
-    return {
-      label: payment.due_date?.slice(5, 10) ?? `T${index + 1}`,
+    const label = payment.due_date?.slice(5, 10) ?? `T${index + 1}`
+    const current = daily.get(label) ?? {
+      label,
       balance: rolling,
       cumulativeExpenses,
+      dailyExpenses: 0,
     }
-  })
+    if (signed < 0) {
+      const expense = Math.abs(signed)
+      cumulativeExpenses += expense
+      current.dailyExpenses += expense
+    }
+    current.balance = rolling
+    current.cumulativeExpenses = cumulativeExpenses
+    daily.set(label, current)
+  }
+
+  return [...daily.values()]
 }
