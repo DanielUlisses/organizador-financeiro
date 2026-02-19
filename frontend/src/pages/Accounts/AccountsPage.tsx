@@ -38,6 +38,9 @@ const USER_ID = 1
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 const EFFECTIVE_STATUSES = new Set(['processed', 'reconciled'])
 const PENDING_STATUSES = new Set(['pending', 'scheduled'])
+const normalizeDateKey = (value?: string | null) => (value ?? '').slice(0, 10)
+const toYmd = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 
 export function AccountsPage() {
   const { currentMonth } = useMonthContext()
@@ -111,7 +114,9 @@ export function AccountsPage() {
         payment_type?: string
         status?: string
         notes?: string
+        from_account_type?: string
         from_account_id?: number
+        to_account_type?: string
         to_account_id?: number
         tag_ids?: number[]
       }>
@@ -141,7 +146,9 @@ export function AccountsPage() {
             due_date: payment.due_date,
             status: payment.status,
             notes: payment.notes,
+            from_account_type: payment.from_account_type,
             from_account_id: payment.from_account_id,
+            to_account_type: payment.to_account_type,
             to_account_id: payment.to_account_id,
             tag_ids: payment.tag_ids ?? [],
           })
@@ -161,7 +168,9 @@ export function AccountsPage() {
             due_date: occurrence.scheduled_date,
             status: occurrence.status ?? payment.status,
             notes: occurrence.notes ?? payment.notes,
+            from_account_type: payment.from_account_type,
             from_account_id: payment.from_account_id,
+            to_account_type: payment.to_account_type,
             to_account_id: payment.to_account_id,
             tag_ids: payment.tag_ids ?? [],
           })
@@ -232,27 +241,23 @@ export function AccountsPage() {
     [payments, selectedAccountId],
   )
 
-  const monthStart = useMemo(
-    () => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1),
-    [currentMonth],
-  )
-  const monthEnd = useMemo(
-    () => new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0),
-    [currentMonth],
-  )
+  const monthStart = useMemo(() => new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1), [currentMonth])
+  const monthEnd = useMemo(() => new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0), [currentMonth])
+  const monthStartKey = useMemo(() => toYmd(monthStart), [monthStart])
+  const monthEndKey = useMemo(() => toYmd(monthEnd), [monthEnd])
   const carryOverBalance = useMemo(() => {
     if (!selectedAccount || !selectedAccountId) return 0
     let rolling = selectedAccount.balance
     for (const payment of allAccountPayments) {
-      if (!payment.due_date) continue
+      const dueDateKey = normalizeDateKey(payment.due_date)
+      if (!dueDateKey) continue
       const status = (payment.status ?? 'pending').toLowerCase()
       if (!EFFECTIVE_STATUSES.has(status)) continue
-      const dueDate = new Date(payment.due_date)
-      if (dueDate < monthStart) continue
-      rolling -= getSignedAmount(payment, selectedAccountId, false)
+      if (dueDateKey >= monthStartKey) continue
+      rolling += getSignedAmount(payment, selectedAccountId, false)
     }
     return rolling
-  }, [allAccountPayments, monthStart, selectedAccount, selectedAccountId])
+  }, [allAccountPayments, monthStartKey, selectedAccount, selectedAccountId])
 
   const statementGroupedByDate = useMemo(() => {
     if (!selectedAccount || !selectedAccountId || statementPayments.length === 0) return []
@@ -272,7 +277,7 @@ export function AccountsPage() {
       grouped.set(dateKey, current)
     }
 
-    const carryKey = monthStart.toISOString().slice(0, 10)
+    const carryKey = monthStartKey
     const groups = [
       {
         date: carryKey,
@@ -283,7 +288,7 @@ export function AccountsPage() {
     ]
     groups.sort((a, b) => a.date.localeCompare(b.date))
     return sortOrder === 'older' ? groups : groups.reverse()
-  }, [statementPayments, selectedAccount, selectedAccountId, sortOrder, carryOverBalance, monthStart])
+  }, [statementPayments, selectedAccount, selectedAccountId, sortOrder, carryOverBalance, monthStartKey])
 
   const totals = useMemo(() => {
     if (!selectedAccountId) return { inflow: 0, outflow: 0, net: 0 }
@@ -316,19 +321,19 @@ export function AccountsPage() {
 
   const displayedCurrentBalance = useMemo(() => {
     if (!selectedAccountId) return carryOverBalance
-    const now = new Date()
-    const cutoff = monthEnd < now ? monthEnd : now
+    const nowKey = toYmd(new Date())
+    const cutoffKey = monthEndKey < nowKey ? monthEndKey : nowKey
     let running = carryOverBalance
     for (const payment of statementPayments) {
-      if (!payment.due_date) continue
+      const dueKey = normalizeDateKey(payment.due_date)
+      if (!dueKey) continue
       const status = (payment.status ?? 'pending').toLowerCase()
       if (!EFFECTIVE_STATUSES.has(status)) continue
-      const due = new Date(payment.due_date)
-      if (due > cutoff) continue
+      if (dueKey > cutoffKey) continue
       running += getSignedAmount(payment, selectedAccountId)
     }
     return running
-  }, [carryOverBalance, monthEnd, selectedAccountId, statementPayments])
+  }, [carryOverBalance, monthEndKey, selectedAccountId, statementPayments])
 
   const runningBalanceSeries = useMemo(() => {
     if (!selectedAccountId || !selectedAccount) return []
@@ -392,7 +397,6 @@ export function AccountsPage() {
     setNotice(successMessage)
   }
 
-  const normalizeDateKey = (value?: string | null) => (value ?? '').slice(0, 10)
   const toDate = (value: string) => new Date(`${normalizeDateKey(value)}T00:00:00`)
   const toIsoDate = (value: Date) => value.toISOString().slice(0, 10)
   const shiftIsoDate = (value: string, deltaDays: number) => {

@@ -16,6 +16,16 @@ class InvestmentAccountType(str, enum.Enum):
     OTHER = "other"
 
 
+class InvestmentAssetType(str, enum.Enum):
+    """Supported Brazilian-focused investment asset classes."""
+    NATIONAL_TREASURY = "national_treasury"
+    CDB_RDB = "cdb_rdb"
+    STOCK = "stock"
+    FII = "fii"
+    FUND = "fund"
+    OTHER = "other"
+
+
 class InvestmentAccount(Base):
     """Investment account model with extended features"""
     __tablename__ = "investment_accounts"
@@ -49,6 +59,8 @@ class InvestmentHolding(Base):
     account_id = Column(Integer, ForeignKey("investment_accounts.id"), nullable=False, index=True)
     symbol = Column(String, nullable=False)  # e.g., "AAPL", "VTI"
     name = Column(String, nullable=True)
+    asset_type = Column(Enum(InvestmentAssetType), nullable=False, default=InvestmentAssetType.OTHER)
+    fund_cnpj = Column(String(18), nullable=True)  # Required for Brazilian funds
     quantity = Column(Numeric(15, 6), nullable=False)  # Number of shares/units
     average_cost = Column(Numeric(15, 2), nullable=False)  # Average cost per share
     current_price = Column(Numeric(15, 2), nullable=True)  # Current market price

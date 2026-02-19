@@ -8,12 +8,15 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models.credit_card import CreditCard
-from app.models.payment import Payment, PaymentOccurrence, PaymentStatus
+from app.models.bank_account import BankAccount, AccountType
+from app.models.payment import Payment, PaymentOccurrence, PaymentStatus, PaymentType, PaymentCategory
 from app.schemas.credit_card import CreditCardCreate, CreditCardUpdate
 
 
 class CreditCardService:
     """Service for credit card operations"""
+    PLANNED_PAYMENT_NOTE_PREFIX = "planned_credit_card_payment:card_id="
+    PLANNED_PAYMENT_MONTHS_AHEAD = 12
 
     @staticmethod
     def get_card(db: Session, card_id: int, user_id: int) -> Optional[CreditCard]:
@@ -33,8 +36,14 @@ class CreditCardService:
     @staticmethod
     def create_card(db: Session, user_id: int, card_data: CreditCardCreate) -> CreditCard:
         """Create a new credit card"""
-        db_card = CreditCard(user_id=user_id, **card_data.model_dump())
+        data = card_data.model_dump()
+        data["default_payment_account_id"] = CreditCardService._resolve_default_payment_account_id(
+            db, user_id, data.get("default_payment_account_id")
+        )
+        db_card = CreditCard(user_id=user_id, **data)
         db.add(db_card)
+        db.flush()
+        CreditCardService._sync_planned_payments(db, db_card)
         db.commit()
         db.refresh(db_card)
         return db_card
@@ -53,8 +62,17 @@ class CreditCardService:
             return None
         
         update_data = card_data.model_dump(exclude_unset=True)
+        if "default_payment_account_id" in update_data:
+            update_data["default_payment_account_id"] = CreditCardService._resolve_default_payment_account_id(
+                db, user_id, update_data.get("default_payment_account_id")
+            )
         for field, value in update_data.items():
             setattr(db_card, field, value)
+        if not db_card.default_payment_account_id:
+            db_card.default_payment_account_id = CreditCardService._resolve_default_payment_account_id(
+                db, user_id, None
+            )
+        CreditCardService._sync_planned_payments(db, db_card)
         
         db.commit()
         db.refresh(db_card)
@@ -72,6 +90,11 @@ class CreditCardService:
             return None
         
         db_card.current_balance = new_balance
+        if not db_card.default_payment_account_id:
+            db_card.default_payment_account_id = CreditCardService._resolve_default_payment_account_id(
+                db, user_id, None
+            )
+        CreditCardService._sync_planned_payments(db, db_card)
         db.commit()
         db.refresh(db_card)
         return db_card
@@ -86,6 +109,14 @@ class CreditCardService:
         
         if not db_card:
             return False
+
+        db.query(Payment).filter(
+            Payment.user_id == user_id,
+            Payment.to_account_type == "credit_card",
+            Payment.to_account_id == db_card.id,
+            Payment.notes.like(f"{CreditCardService.PLANNED_PAYMENT_NOTE_PREFIX}{db_card.id}%"),
+            Payment.status.in_([PaymentStatus.PENDING, PaymentStatus.SCHEDULED]),
+        ).delete(synchronize_session=False)
         
         db.delete(db_card)
         db.commit()
@@ -267,6 +298,17 @@ class CreditCardService:
         }
 
     @staticmethod
+    def sync_planned_payments(db: Session, card_id: int, user_id: int) -> bool:
+        card = CreditCardService.get_card(db, card_id, user_id)
+        if not card:
+            return False
+        if not card.default_payment_account_id:
+            card.default_payment_account_id = CreditCardService._resolve_default_payment_account_id(db, user_id, None)
+        CreditCardService._sync_planned_payments(db, card)
+        db.commit()
+        return True
+
+    @staticmethod
     def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
         new_month = month + delta
         new_year = year
@@ -283,3 +325,126 @@ class CreditCardService:
         last_day = calendar.monthrange(year, month)[1]
         safe_day = min(day, last_day)
         return date(year, month, safe_day)
+
+    @staticmethod
+    def _resolve_default_payment_account_id(
+        db: Session, user_id: int, preferred_account_id: Optional[int]
+    ) -> Optional[int]:
+        if preferred_account_id is not None:
+            preferred = db.query(BankAccount).filter(
+                BankAccount.id == preferred_account_id,
+                BankAccount.user_id == user_id,
+                BankAccount.is_active == True,
+            ).first()
+            if preferred:
+                return preferred.id
+
+        checking = db.query(BankAccount).filter(
+            BankAccount.user_id == user_id,
+            BankAccount.is_active == True,
+            BankAccount.account_type == AccountType.CHECKING,
+        ).order_by(BankAccount.id).first()
+        if checking:
+            return checking.id
+
+        fallback = db.query(BankAccount).filter(
+            BankAccount.user_id == user_id,
+            BankAccount.is_active == True,
+        ).order_by(BankAccount.id).first()
+        return fallback.id if fallback else None
+
+    @staticmethod
+    def _planned_note(card_id: int) -> str:
+        return f"{CreditCardService.PLANNED_PAYMENT_NOTE_PREFIX}{card_id}"
+
+    @staticmethod
+    def _sync_planned_payments(db: Session, card: CreditCard) -> None:
+        if not card.default_payment_account_id:
+            return
+
+        today = date.today()
+        plan_entries: List[Dict[str, Any]] = []
+        for offset in range(CreditCardService.PLANNED_PAYMENT_MONTHS_AHEAD):
+            year, month = CreditCardService._shift_month(today.year, today.month, offset)
+            reference = date(year, month, min(15, calendar.monthrange(year, month)[1]))
+            cycle = CreditCardService.get_invoice_cycle(db, card.id, card.user_id, reference)
+            if cycle:
+                summary = CreditCardService.get_statement_summary(db, card.id, card.user_id, reference)
+                desired_amount = Decimal("0.00")
+                if summary:
+                    desired_amount = summary["statement_balance"]
+                if desired_amount < Decimal("0.00"):
+                    desired_amount = Decimal("0.00")
+                plan_entries.append(
+                    {
+                        "due_date": cycle["due_date"],
+                        "amount": desired_amount,
+                    }
+                )
+
+        if not plan_entries:
+            return
+
+        due_dates = [entry["due_date"] for entry in plan_entries]
+        desired_by_due = {entry["due_date"]: entry["amount"] for entry in plan_entries}
+
+        existing = db.query(Payment).filter(
+            Payment.user_id == card.user_id,
+            Payment.payment_type == PaymentType.ONE_TIME,
+            Payment.to_account_type == "credit_card",
+            Payment.to_account_id == card.id,
+            Payment.due_date.in_(due_dates),
+            Payment.status.notin_([PaymentStatus.CANCELLED, PaymentStatus.FAILED]),
+        ).all()
+
+        planned_by_due: Dict[date, Payment] = {}
+        blocked_due_dates = set()
+        for payment in existing:
+            if payment.notes == CreditCardService._planned_note(card.id):
+                planned_by_due[payment.due_date] = payment
+            else:
+                blocked_due_dates.add(payment.due_date)
+
+        for due_date in due_dates:
+            if due_date in blocked_due_dates:
+                if due_date in planned_by_due:
+                    db.delete(planned_by_due[due_date])
+                continue
+
+            desired_amount = desired_by_due[due_date]
+
+            planned = planned_by_due.get(due_date)
+            if desired_amount <= Decimal("0.00"):
+                if planned:
+                    db.delete(planned)
+                continue
+
+            if planned:
+                planned.description = f"Planned payment - {card.name}"
+                planned.amount = desired_amount
+                planned.currency = card.currency
+                planned.category = PaymentCategory.TRANSFER
+                planned.from_account_type = "bank_account"
+                planned.from_account_id = card.default_payment_account_id
+                planned.to_account_type = "credit_card"
+                planned.to_account_id = card.id
+                planned.status = PaymentStatus.PENDING
+                planned.notes = CreditCardService._planned_note(card.id)
+            else:
+                db.add(
+                    Payment(
+                        user_id=card.user_id,
+                        payment_type=PaymentType.ONE_TIME,
+                        description=f"Planned payment - {card.name}",
+                        amount=desired_amount,
+                        currency=card.currency,
+                        category=PaymentCategory.TRANSFER,
+                        from_account_type="bank_account",
+                        from_account_id=card.default_payment_account_id,
+                        to_account_type="credit_card",
+                        to_account_id=card.id,
+                        due_date=due_date,
+                        status=PaymentStatus.PENDING,
+                        notes=CreditCardService._planned_note(card.id),
+                    )
+                )

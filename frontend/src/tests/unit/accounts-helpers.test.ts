@@ -13,6 +13,15 @@ describe('accounts helpers', () => {
     expect(getSignedAmount({ id: 2, description: '', amount: 100, to_account_id: 10 }, 10)).toBe(100)
   })
 
+  it('prioritizes bank account type on mixed account ids', () => {
+    expect(
+      getSignedAmount(
+        { id: 3, description: '', amount: 100, from_account_type: 'investment_account', from_account_id: 10, to_account_type: 'bank_account', to_account_id: 10 },
+        10,
+      ),
+    ).toBe(100)
+  })
+
   it('builds running balance series ordered by due date', () => {
     const series = buildRunningBalanceSeries(
       1000,

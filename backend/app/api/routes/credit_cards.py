@@ -106,3 +106,12 @@ def get_statement_summary(
     if not summary:
         raise HTTPException(status_code=404, detail="Credit card not found")
     return summary
+
+
+@router.post("/{card_id}/sync-planned-payments", status_code=204)
+def sync_planned_payments(card_id: int, user_id: int, db: Session = Depends(get_db)):
+    """Sync future planned card-payment transactions for account planning."""
+    success = CreditCardService.sync_planned_payments(db, card_id, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Credit card not found")
+    return None

@@ -16,6 +16,7 @@ class CreditCard(Base):
     card_number_last4 = Column(String(4), nullable=True)  # Last 4 digits for display
     credit_limit = Column(Numeric(15, 2), nullable=False)
     current_balance = Column(Numeric(15, 2), default=0.00, nullable=False)
+    default_payment_account_id = Column(Integer, ForeignKey("bank_accounts.id"), nullable=True, index=True)
     invoice_close_day = Column(SQLInteger, nullable=False)  # Day of month (1-31)
     payment_due_day = Column(SQLInteger, nullable=False)  # Days after close date
     currency = Column(String(3), default="USD", nullable=False)
@@ -25,6 +26,7 @@ class CreditCard(Base):
 
     # Relationships
     user = relationship("User", backref="credit_cards")
+    default_payment_account = relationship("BankAccount", foreign_keys=[default_payment_account_id])
 
     def __repr__(self):
         return f"<CreditCard(id={self.id}, name={self.name}, balance={self.current_balance})>"

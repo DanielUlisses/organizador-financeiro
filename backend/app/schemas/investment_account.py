@@ -1,18 +1,33 @@
 """Investment account schemas"""
+import re
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
-from app.models.investment_account import InvestmentAccountType
+from pydantic import model_validator
+from app.models.investment_account import InvestmentAccountType, InvestmentAssetType
 
 
 class InvestmentHoldingBase(BaseModel):
     symbol: str
     name: Optional[str] = None
+    asset_type: InvestmentAssetType = InvestmentAssetType.OTHER
+    fund_cnpj: Optional[str] = None
     quantity: Decimal
     average_cost: Decimal
     current_price: Optional[Decimal] = None
     currency: str = "USD"
+
+    @model_validator(mode="after")
+    def validate_fund_cnpj(self):
+        if self.asset_type != InvestmentAssetType.FUND:
+            return self
+        if not self.fund_cnpj:
+            raise ValueError("fund_cnpj is required when asset_type is fund")
+        normalized = re.sub(r"\D", "", self.fund_cnpj)
+        if len(normalized) != 14:
+            raise ValueError("fund_cnpj must have 14 digits")
+        return self
 
 
 class InvestmentHoldingCreate(InvestmentHoldingBase):
@@ -22,6 +37,8 @@ class InvestmentHoldingCreate(InvestmentHoldingBase):
 class InvestmentHoldingUpdate(BaseModel):
     symbol: Optional[str] = None
     name: Optional[str] = None
+    asset_type: Optional[InvestmentAssetType] = None
+    fund_cnpj: Optional[str] = None
     quantity: Optional[Decimal] = None
     average_cost: Optional[Decimal] = None
     current_price: Optional[Decimal] = None

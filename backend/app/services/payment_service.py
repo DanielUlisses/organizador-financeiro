@@ -88,6 +88,7 @@ class PaymentService:
         
         db.commit()
         db.refresh(db_payment)
+        PaymentService._sync_credit_card_plans_for_payment(db, user_id, db_payment)
         return db_payment
 
     @staticmethod
@@ -129,6 +130,7 @@ class PaymentService:
         
         db.commit()
         db.refresh(db_payment)
+        PaymentService._sync_credit_card_plans_for_payment(db, user_id, db_payment)
         return db_payment
 
     @staticmethod
@@ -144,6 +146,7 @@ class PaymentService:
         if not db_payment:
             return None
         
+        old_card_ids = PaymentService._credit_card_ids_from_payment(db_payment)
         update_data = payment_data.model_dump(exclude_unset=True)
         tag_ids = update_data.pop("tag_ids", None)
         
@@ -167,6 +170,8 @@ class PaymentService:
         
         db.commit()
         db.refresh(db_payment)
+        new_card_ids = PaymentService._credit_card_ids_from_payment(db_payment)
+        PaymentService._sync_credit_card_plans(db, user_id, old_card_ids.union(new_card_ids))
         return db_payment
 
     @staticmethod
@@ -180,8 +185,10 @@ class PaymentService:
         if not db_payment:
             return False
         
+        card_ids = PaymentService._credit_card_ids_from_payment(db_payment)
         db.delete(db_payment)
         db.commit()
+        PaymentService._sync_credit_card_plans(db, user_id, card_ids)
         return True
 
     @staticmethod
@@ -253,11 +260,13 @@ class PaymentService:
             return None
         
         update_data = occurrence_data.model_dump(exclude_unset=True)
+        card_ids = PaymentService._credit_card_ids_from_payment(occurrence.payment)
         for field, value in update_data.items():
             setattr(occurrence, field, value)
         
         db.commit()
         db.refresh(occurrence)
+        PaymentService._sync_credit_card_plans(db, user_id, card_ids)
         return occurrence
 
     @staticmethod
@@ -271,8 +280,10 @@ class PaymentService:
         if not occurrence:
             return False
         
+        card_ids = PaymentService._credit_card_ids_from_payment(occurrence.payment)
         db.delete(occurrence)
         db.commit()
+        PaymentService._sync_credit_card_plans(db, user_id, card_ids)
         return True
 
     @staticmethod
@@ -424,7 +435,30 @@ class PaymentService:
             current_date = PaymentService._calculate_next_due_date(current_date, payment.frequency)
         
         db.commit()
+        PaymentService._sync_credit_card_plans_for_payment(db, user_id, payment)
         return generated
+
+    @staticmethod
+    def _credit_card_ids_from_payment(payment: Payment) -> set[int]:
+        ids: set[int] = set()
+        if payment.from_account_type == "credit_card" and payment.from_account_id:
+            ids.add(payment.from_account_id)
+        if payment.to_account_type == "credit_card" and payment.to_account_id:
+            ids.add(payment.to_account_id)
+        return ids
+
+    @staticmethod
+    def _sync_credit_card_plans_for_payment(db: Session, user_id: int, payment: Payment) -> None:
+        PaymentService._sync_credit_card_plans(db, user_id, PaymentService._credit_card_ids_from_payment(payment))
+
+    @staticmethod
+    def _sync_credit_card_plans(db: Session, user_id: int, card_ids: set[int]) -> None:
+        if not card_ids:
+            return
+        from app.services.credit_card_service import CreditCardService
+
+        for card_id in card_ids:
+            CreditCardService.sync_planned_payments(db, card_id, user_id)
 
     @staticmethod
     def _calculate_next_due_date(start_date: date, frequency: PaymentFrequency) -> date:

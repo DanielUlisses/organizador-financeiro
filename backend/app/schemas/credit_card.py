@@ -10,6 +10,7 @@ class CreditCardBase(BaseModel):
     issuer: Optional[str] = None
     card_number_last4: Optional[str] = None
     credit_limit: Decimal
+    default_payment_account_id: Optional[int] = None
     invoice_close_day: int = Field(ge=1, le=31, description="Day of month (1-31)")
     payment_due_day: int = Field(ge=1, le=31, description="Days after close date")
     currency: str = "USD"
@@ -24,6 +25,7 @@ class CreditCardUpdate(BaseModel):
     issuer: Optional[str] = None
     card_number_last4: Optional[str] = None
     credit_limit: Optional[Decimal] = None
+    default_payment_account_id: Optional[int] = None
     current_balance: Optional[Decimal] = None
     invoice_close_day: Optional[int] = Field(None, ge=1, le=31)
     payment_due_day: Optional[int] = Field(None, ge=1, le=31)

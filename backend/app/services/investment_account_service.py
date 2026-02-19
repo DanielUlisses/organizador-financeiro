@@ -109,6 +109,8 @@ class InvestmentHoldingService:
         """Create a new holding"""
         db_holding = InvestmentHolding(account_id=account_id, **holding_data.model_dump())
         db.add(db_holding)
+        db.flush()
+        InvestmentHoldingService._refresh_account_current_value(db, account_id)
         db.commit()
         db.refresh(db_holding)
         return db_holding
@@ -129,7 +131,7 @@ class InvestmentHoldingService:
         update_data = holding_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_holding, field, value)
-        
+        InvestmentHoldingService._refresh_account_current_value(db, account_id)
         db.commit()
         db.refresh(db_holding)
         return db_holding
@@ -146,8 +148,20 @@ class InvestmentHoldingService:
             return False
         
         db.delete(db_holding)
+        db.flush()
+        InvestmentHoldingService._refresh_account_current_value(db, account_id)
         db.commit()
         return True
+
+    @staticmethod
+    def _refresh_account_current_value(db: Session, account_id: int) -> None:
+        holdings = db.query(InvestmentHolding).filter(
+            InvestmentHolding.account_id == account_id
+        ).with_entities(InvestmentHolding.current_value).all()
+        total = sum(row[0] for row in holdings) if holdings else Decimal("0.00")
+        account = db.query(InvestmentAccount).filter(InvestmentAccount.id == account_id).first()
+        if account:
+            account.current_value = total
 
 
 class InvestmentHistoryService:

@@ -6,6 +6,7 @@ from app.models.credit_card import CreditCard
 from app.models.investment_account import (
     InvestmentAccount,
     InvestmentAccountType,
+    InvestmentAssetType,
     InvestmentHolding,
     InvestmentHistory,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "CreditCard",
     "InvestmentAccount",
     "InvestmentAccountType",
+    "InvestmentAssetType",
     "InvestmentHolding",
     "InvestmentHistory",
     "Payment",

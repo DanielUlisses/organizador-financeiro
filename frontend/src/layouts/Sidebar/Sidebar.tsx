@@ -13,6 +13,7 @@ const links = [
   { to: '/accounts', label: 'Accounts', icon: Landmark },
   { to: '/credit-cards', label: 'Credit Cards', icon: CreditCard },
   { to: '/investments', label: 'Investments', icon: Wallet },
+  { to: '/investments/tax', label: 'Investments Tax', icon: Wallet },
   { to: '/analytics', label: 'Analytics', icon: LineChart },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/profile', label: 'Profile', icon: User },

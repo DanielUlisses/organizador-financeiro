@@ -4,7 +4,9 @@ export type AccountPayment = {
   amount: number
   category?: string | null
   due_date?: string | null
+  from_account_type?: string | null
   from_account_id?: number | null
+  to_account_type?: string | null
   to_account_id?: number | null
 }
 
@@ -18,6 +20,9 @@ export const isInMonth = (isoDate: string, month: Date) => {
 export const getSignedAmount = (payment: AccountPayment, accountId: number, fallbackExpense = true) => {
   const category = (payment.category ?? '').toLowerCase()
   const amount = payment.amount
+
+  if (payment.from_account_type === 'bank_account' && payment.from_account_id === accountId) return -Math.abs(amount)
+  if (payment.to_account_type === 'bank_account' && payment.to_account_id === accountId) return Math.abs(amount)
 
   if (payment.from_account_id === accountId) return -Math.abs(amount)
   if (payment.to_account_id === accountId) return Math.abs(amount)
