@@ -93,10 +93,10 @@ To start development:
    # Edit .env if needed
    ```
 
-2. **Start database**
+2. **Start database and create databases**
    ```bash
-   make start-db
-   # or: docker-compose -f docker/docker-compose.yml up -d
+   make createdb
+   # Starts PostgreSQL Docker container and creates organizador_financeiro + organizador_financeiro_test
    ```
 
 3. **Set up backend**

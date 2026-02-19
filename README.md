@@ -34,9 +34,10 @@ Web application to help users organize their finances. Single user per deploymen
    # Edit .env with your configuration
    ```
 
-3. **Start PostgreSQL database**
+3. **Start PostgreSQL and create databases**
    ```bash
-   docker-compose -f docker/docker-compose.yml up -d
+   make createdb
+   # Starts Docker container, creates organizador_financeiro and organizador_financeiro_test
    ```
 
 4. **Set up backend**

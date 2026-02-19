@@ -226,8 +226,8 @@ Phase 2 is complete. Ready for Phase 3: Payments (one-time payments, recurring p
 To validate Phase 2 implementation:
 
 ```bash
-# Ensure test database exists
-createdb organizador_financeiro_test  # or via Docker
+# Start PostgreSQL and create databases (main + test)
+make createdb
 
 # Install dependencies
 cd backend

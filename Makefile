@@ -1,4 +1,4 @@
-.PHONY: help setup-backend setup-frontend setup-db start-db stop-db migrate-up migrate-down start-backend start-frontend install
+.PHONY: help setup-backend setup-frontend setup-db start-db stop-db createdb migrate-up migrate-down start-backend start-frontend install
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -13,13 +13,23 @@ setup-backend: ## Set up backend Python environment
 setup-frontend: ## Set up frontend dependencies
 	cd frontend && npm install
 
-setup-db: ## Start PostgreSQL database container
-	docker-compose -f docker/docker-compose.yml up -d
-	@echo "Waiting for database to be ready..."
-	@sleep 5
+setup-db: createdb ## Alias for createdb
 
-start-db: ## Start PostgreSQL database
+start-db: ## Start PostgreSQL container (does not create databases)
 	docker-compose -f docker/docker-compose.yml up -d
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until docker exec organizador-financeiro-db pg_isready -U postgres 2>/dev/null; do sleep 1; done
+
+createdb: ## Start PostgreSQL Docker container and create databases
+	docker-compose -f docker/docker-compose.yml up -d
+	@echo "Waiting for PostgreSQL to be ready..."
+	@until docker exec organizador-financeiro-db pg_isready -U postgres 2>/dev/null; do sleep 1; done
+	@echo "Creating databases if they don't exist..."
+	@docker exec organizador-financeiro-db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'organizador_financeiro'" | grep -q 1 || \
+		docker exec organizador-financeiro-db psql -U postgres -c "CREATE DATABASE organizador_financeiro;"
+	@docker exec organizador-financeiro-db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'organizador_financeiro_test'" | grep -q 1 || \
+		docker exec organizador-financeiro-db psql -U postgres -c "CREATE DATABASE organizador_financeiro_test;"
+	@echo "Databases ready: organizador_financeiro, organizador_financeiro_test"
 
 stop-db: ## Stop PostgreSQL database
 	docker-compose -f docker/docker-compose.yml stop
