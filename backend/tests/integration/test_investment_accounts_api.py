@@ -1,5 +1,6 @@
 """Integration tests for investment accounts API"""
 import pytest
+import uuid
 from decimal import Decimal
 from datetime import datetime
 from app.models.user import User
@@ -11,11 +12,11 @@ class TestInvestmentAccountsAPI:
     """Test investment accounts API endpoints"""
 
     @pytest.fixture
-    def user(self, db):
+    def user(self, db_session):
         """Create a test user"""
-        user = User(email="test@example.com", name="Test User")
-        db.add(user)
-        db.commit()
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com", name="Test User")
+        db_session.add(user)
+        db_session.commit()
         return user
 
     def test_create_investment_account(self, client, user):
@@ -36,7 +37,7 @@ class TestInvestmentAccountsAPI:
         assert float(data["current_value"]) == 10000.00
         assert data["user_id"] == user.id
 
-    def test_get_investment_account(self, client, user, db):
+    def test_get_investment_account(self, client, user, db_session):
         """Test getting an investment account"""
         account = InvestmentAccount(
             user_id=user.id,
@@ -44,8 +45,8 @@ class TestInvestmentAccountsAPI:
             account_type=InvestmentAccountType.BROKERAGE,
             current_value=Decimal("10000.00")
         )
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
 
         response = client.get(f"/investment-accounts/{account.id}?user_id={user.id}")
         assert response.status_code == 200
@@ -53,7 +54,7 @@ class TestInvestmentAccountsAPI:
         assert data["name"] == "Test Account"
         assert float(data["current_value"]) == 10000.00
 
-    def test_get_all_investment_accounts(self, client, user, db):
+    def test_get_all_investment_accounts(self, client, user, db_session):
         """Test getting all investment accounts for a user"""
         account1 = InvestmentAccount(
             user_id=user.id,
@@ -67,23 +68,23 @@ class TestInvestmentAccountsAPI:
             account_type=InvestmentAccountType.IRA,
             current_value=Decimal("5000.00")
         )
-        db.add_all([account1, account2])
-        db.commit()
+        db_session.add_all([account1, account2])
+        db_session.commit()
 
         response = client.get(f"/investment-accounts/?user_id={user.id}")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
 
-    def test_create_holding(self, client, user, db):
+    def test_create_holding(self, client, user, db_session):
         """Test creating an investment holding"""
         account = InvestmentAccount(
             user_id=user.id,
             name="Test Account",
             account_type=InvestmentAccountType.BROKERAGE
         )
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
 
         response = client.post(
             f"/investment-accounts/{account.id}/holdings",
@@ -102,15 +103,15 @@ class TestInvestmentAccountsAPI:
         assert float(data["quantity"]) == 10.0
         assert float(data["current_value"]) == 1750.00
 
-    def test_get_holdings(self, client, user, db):
+    def test_get_holdings(self, client, user, db_session):
         """Test getting holdings for an account"""
         account = InvestmentAccount(
             user_id=user.id,
             name="Test Account",
             account_type=InvestmentAccountType.BROKERAGE
         )
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
 
         holding1 = InvestmentHolding(
             account_id=account.id,
@@ -128,15 +129,15 @@ class TestInvestmentAccountsAPI:
             current_price=Decimal("220.00"),
             current_value=Decimal("1100.00")
         )
-        db.add_all([holding1, holding2])
-        db.commit()
+        db_session.add_all([holding1, holding2])
+        db_session.commit()
 
         response = client.get(f"/investment-accounts/{account.id}/holdings")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
 
-    def test_get_total_value(self, client, user, db):
+    def test_get_total_value(self, client, user, db_session):
         """Test getting total value"""
         account1 = InvestmentAccount(
             user_id=user.id,
@@ -150,23 +151,23 @@ class TestInvestmentAccountsAPI:
             account_type=InvestmentAccountType.IRA,
             current_value=Decimal("5000.00")
         )
-        db.add_all([account1, account2])
-        db.commit()
+        db_session.add_all([account1, account2])
+        db_session.commit()
 
         response = client.get(f"/investment-accounts/{user.id}/total-value")
         assert response.status_code == 200
         data = response.json()
         assert data["total_value"] == 15000.00
 
-    def test_create_history(self, client, user, db):
+    def test_create_history(self, client, user, db_session):
         """Test creating investment history"""
         account = InvestmentAccount(
             user_id=user.id,
             name="Test Account",
             account_type=InvestmentAccountType.BROKERAGE
         )
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
 
         response = client.post(
             f"/investment-accounts/{account.id}/history",

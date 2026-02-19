@@ -15,7 +15,7 @@ Web application to help users organize their finances. Single user per deploymen
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.10-3.13 (3.12 or 3.13 recommended; Python 3.14+ not yet supported by pydantic-core)
 - Node.js 20+
 - Docker and Docker Compose
 - PostgreSQL 18 (via Docker)

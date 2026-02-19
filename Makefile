@@ -7,7 +7,10 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 setup-backend: ## Set up backend Python environment
-	cd backend && python -m venv .venv
+	@echo "Checking Python version..."
+	@python3 --version | grep -E "Python 3\.(10|11|12|13)" || (echo "ERROR: Python 3.10-3.13 required. Python 3.14+ not supported by pydantic-core." && exit 1)
+	cd backend && python3 -m venv .venv
+	cd backend && .venv/bin/pip install --upgrade pip setuptools wheel
 	cd backend && .venv/bin/pip install -r requirements.txt
 
 setup-frontend: ## Set up frontend dependencies
@@ -34,6 +37,10 @@ createdb: ## Start PostgreSQL Docker container and create databases
 stop-db: ## Stop PostgreSQL database
 	docker-compose -f docker/docker-compose.yml stop
 
+clean-db: ## Stop and remove PostgreSQL container and volumes (WARNING: deletes all data)
+	docker-compose -f docker/docker-compose.yml down -v
+	@echo "PostgreSQL container and volumes removed. Run 'make createdb' to start fresh."
+
 migrate-up: ## Run database migrations
 	cd backend && alembic upgrade head
 
@@ -43,17 +50,34 @@ migrate-down: ## Rollback last migration
 migrate-create: ## Create a new migration (usage: make migrate-create MESSAGE="description")
 	cd backend && alembic revision --autogenerate -m "$(MESSAGE)"
 
-test: ## Run all tests
-	cd backend && pytest tests/ -v
+test: clean-test-db ## Run all tests (cleans locks first)
+	@echo "Checking test database connection..."
+	@docker exec organizador-financeiro-db pg_isready -U postgres -d organizador_financeiro_test >/dev/null 2>&1 || \
+		(echo "ERROR: Test database not accessible. Run 'make createdb' first." && exit 1)
+	cd backend && pytest tests/ -v --tb=short
 
-test-unit: ## Run unit tests only
-	cd backend && pytest tests/unit/ -v
+test-unit: clean-test-db ## Run unit tests only (cleans locks first)
+	@echo "Checking test database connection..."
+	@docker exec organizador-financeiro-db pg_isready -U postgres -d organizador_financeiro_test >/dev/null 2>&1 || \
+		(echo "ERROR: Test database not accessible. Run 'make createdb' first." && exit 1)
+	cd backend && pytest tests/unit/ -v --tb=short
 
-test-integration: ## Run integration tests only
-	cd backend && pytest tests/integration/ -v
+test-integration: clean-test-db ## Run integration tests only (cleans locks first)
+	@echo "Checking test database connection..."
+	@docker exec organizador-financeiro-db pg_isready -U postgres -d organizador_financeiro_test >/dev/null 2>&1 || \
+		(echo "ERROR: Test database not accessible. Run 'make createdb' first." && exit 1)
+	cd backend && pytest tests/integration/ -v --tb=short
 
-test-coverage: ## Run tests with coverage report
-	cd backend && pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html
+test-coverage: clean-test-db ## Run tests with coverage report (cleans locks first)
+	@echo "Checking test database connection..."
+	@docker exec organizador-financeiro-db pg_isready -U postgres -d organizador_financeiro_test >/dev/null 2>&1 || \
+		(echo "ERROR: Test database not accessible. Run 'make createdb' first." && exit 1)
+	cd backend && pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=html --tb=short
+
+clean-test-db: ## Clean up stuck locks and connections in test database
+	@echo "Cleaning up test database locks..."
+	@docker exec organizador-financeiro-db psql -U postgres -d organizador_financeiro_test -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'organizador_financeiro_test' AND pid <> pg_backend_pid();" || true
+	@echo "Test database cleaned up."
 
 start-backend: ## Start backend development server
 	cd backend && python run.py

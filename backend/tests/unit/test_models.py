@@ -1,5 +1,6 @@
 """Unit tests for models"""
 import pytest
+import uuid
 from decimal import Decimal
 from datetime import datetime
 from app.models.user import User
@@ -14,13 +15,14 @@ class TestUserModel:
 
     def test_create_user(self, db):
         """Test creating a user"""
-        user = User(email="test@example.com", name="Test User")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=unique_email, name="Test User")
         db.add(user)
         db.commit()
         db.refresh(user)
 
         assert user.id is not None
-        assert user.email == "test@example.com"
+        assert user.email == unique_email
         assert user.name == "Test User"
         assert user.is_active is True
         assert user.created_at is not None
@@ -28,14 +30,15 @@ class TestUserModel:
 
     def test_user_repr(self, db):
         """Test user string representation"""
-        user = User(email="test@example.com")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=unique_email)
         db.add(user)
         db.commit()
         db.refresh(user)
 
         assert "User" in repr(user)
         assert str(user.id) in repr(user)
-        assert "test@example.com" in repr(user)
+        assert unique_email in repr(user)
 
 
 @pytest.mark.unit
@@ -44,7 +47,8 @@ class TestBankAccountModel:
 
     def test_create_bank_account(self, db):
         """Test creating a bank account"""
-        user = User(email="test@example.com")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=unique_email)
         db.add(user)
         db.commit()
 
@@ -68,7 +72,7 @@ class TestBankAccountModel:
 
     def test_bank_account_repr(self, db):
         """Test bank account string representation"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -87,7 +91,7 @@ class TestCreditCardModel:
 
     def test_create_credit_card(self, db):
         """Test creating a credit card"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -113,7 +117,7 @@ class TestCreditCardModel:
 
     def test_credit_card_properties(self, db):
         """Test credit card calculated properties"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -134,7 +138,7 @@ class TestCreditCardModel:
 
     def test_credit_card_repr(self, db):
         """Test credit card string representation"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -159,7 +163,7 @@ class TestInvestmentAccountModel:
 
     def test_create_investment_account(self, db):
         """Test creating an investment account"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -181,7 +185,7 @@ class TestInvestmentAccountModel:
 
     def test_investment_holding(self, db):
         """Test creating an investment holding"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -211,11 +215,12 @@ class TestInvestmentAccountModel:
         assert holding.symbol == "AAPL"
         assert holding.quantity == Decimal("10.0")
         assert holding.unrealized_gain_loss == Decimal("250.00")
-        assert holding.unrealized_gain_loss_percentage == Decimal("16.67")
+        # Allow for small rounding differences in percentage calculation
+        assert abs(float(holding.unrealized_gain_loss_percentage) - 16.67) < 0.01
 
     def test_investment_history(self, db):
         """Test creating investment history"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 

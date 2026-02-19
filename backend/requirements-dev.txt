@@ -1,0 +1,8 @@
+# Development dependencies that might help with building
+# Install these if you encounter build issues with pydantic-core
+
+# Build tools
+maturin>=1.0.0
+
+# If building from source fails, try installing Rust:
+# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

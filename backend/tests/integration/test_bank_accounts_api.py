@@ -1,5 +1,6 @@
 """Integration tests for bank accounts API"""
 import pytest
+import uuid
 from decimal import Decimal
 from app.models.user import User
 from app.models.bank_account import BankAccount, AccountType
@@ -10,14 +11,15 @@ class TestBankAccountsAPI:
     """Test bank accounts API endpoints"""
 
     @pytest.fixture
-    def user(self, db):
+    def user(self, db_session):
         """Create a test user"""
-        user = User(email="test@example.com", name="Test User")
-        db.add(user)
-        db.commit()
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com", name="Test User")
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
         return user
 
-    def test_create_bank_account(self, client, user):
+    def test_create_bank_account(self, client, user, db_session):
         """Test creating a bank account"""
         response = client.post(
             f"/bank-accounts/?user_id={user.id}",
@@ -35,7 +37,7 @@ class TestBankAccountsAPI:
         assert float(data["balance"]) == 1000.00
         assert data["user_id"] == user.id
 
-    def test_get_bank_account(self, client, user, db):
+    def test_get_bank_account(self, client, user, db_session):
         """Test getting a bank account"""
         account = BankAccount(
             user_id=user.id,
@@ -43,8 +45,9 @@ class TestBankAccountsAPI:
             account_type=AccountType.CHECKING,
             balance=Decimal("500.00")
         )
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
+        db_session.refresh(account)
 
         response = client.get(f"/bank-accounts/{account.id}?user_id={user.id}")
         assert response.status_code == 200
@@ -52,23 +55,24 @@ class TestBankAccountsAPI:
         assert data["name"] == "Test Account"
         assert float(data["balance"]) == 500.00
 
-    def test_get_all_bank_accounts(self, client, user, db):
+    def test_get_all_bank_accounts(self, client, user, db_session):
         """Test getting all bank accounts for a user"""
         account1 = BankAccount(user_id=user.id, name="Account 1", balance=Decimal("1000.00"))
         account2 = BankAccount(user_id=user.id, name="Account 2", balance=Decimal("500.00"))
-        db.add_all([account1, account2])
-        db.commit()
+        db_session.add_all([account1, account2])
+        db_session.commit()
 
         response = client.get(f"/bank-accounts/?user_id={user.id}")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
 
-    def test_update_bank_account(self, client, user, db):
+    def test_update_bank_account(self, client, user, db_session):
         """Test updating a bank account"""
         account = BankAccount(user_id=user.id, name="Old Name", balance=Decimal("500.00"))
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
+        db_session.refresh(account)
 
         response = client.put(
             f"/bank-accounts/{account.id}?user_id={user.id}",
@@ -79,11 +83,12 @@ class TestBankAccountsAPI:
         assert data["name"] == "New Name"
         assert float(data["balance"]) == 1000.00
 
-    def test_update_balance(self, client, user, db):
+    def test_update_balance(self, client, user, db_session):
         """Test updating account balance"""
         account = BankAccount(user_id=user.id, name="Test Account", balance=Decimal("500.00"))
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
+        db_session.refresh(account)
 
         response = client.patch(
             f"/bank-accounts/{account.id}/balance?user_id={user.id}&balance=1500.00"
@@ -92,12 +97,12 @@ class TestBankAccountsAPI:
         data = response.json()
         assert float(data["balance"]) == 1500.00
 
-    def test_get_total_balance(self, client, user, db):
+    def test_get_total_balance(self, client, user, db_session):
         """Test getting total balance"""
         account1 = BankAccount(user_id=user.id, name="Account 1", balance=Decimal("1000.00"))
         account2 = BankAccount(user_id=user.id, name="Account 2", balance=Decimal("500.00"))
-        db.add_all([account1, account2])
-        db.commit()
+        db_session.add_all([account1, account2])
+        db_session.commit()
 
         response = client.get(f"/bank-accounts/{user.id}/total-balance")
         assert response.status_code == 200
@@ -105,11 +110,11 @@ class TestBankAccountsAPI:
         assert data["user_id"] == user.id
         assert data["total_balance"] == 1500.00
 
-    def test_delete_bank_account(self, client, user, db):
+    def test_delete_bank_account(self, client, user, db_session):
         """Test deleting a bank account"""
         account = BankAccount(user_id=user.id, name="Test Account", balance=Decimal("500.00"))
-        db.add(account)
-        db.commit()
+        db_session.add(account)
+        db_session.commit()
         account_id = account.id
 
         response = client.delete(f"/bank-accounts/{account_id}?user_id={user.id}")

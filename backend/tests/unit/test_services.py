@@ -1,5 +1,6 @@
 """Unit tests for services"""
 import pytest
+import uuid
 from decimal import Decimal
 from app.models.user import User
 from app.models.bank_account import BankAccount, AccountType
@@ -30,36 +31,40 @@ class TestUserService:
 
     def test_create_user(self, db):
         """Test creating a user"""
-        user_data = UserCreate(email="test@example.com", name="Test User")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user_data = UserCreate(email=unique_email, name="Test User")
         user = UserService.create_user(db, user_data)
 
         assert user.id is not None
-        assert user.email == "test@example.com"
+        assert user.email == unique_email
         assert user.name == "Test User"
 
     def test_get_user(self, db):
         """Test getting a user"""
-        user = User(email="test@example.com", name="Test User")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=unique_email, name="Test User")
         db.add(user)
         db.commit()
 
         retrieved = UserService.get_user(db, user.id)
         assert retrieved is not None
-        assert retrieved.email == "test@example.com"
+        assert retrieved.email == unique_email
 
     def test_get_user_by_email(self, db):
         """Test getting a user by email"""
-        user = User(email="test@example.com")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=unique_email)
         db.add(user)
         db.commit()
 
-        retrieved = UserService.get_user_by_email(db, "test@example.com")
+        retrieved = UserService.get_user_by_email(db, unique_email)
         assert retrieved is not None
-        assert retrieved.email == "test@example.com"
+        assert retrieved.email == unique_email
 
     def test_update_user(self, db):
         """Test updating a user"""
-        user = User(email="test@example.com", name="Old Name")
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user = User(email=unique_email, name="Old Name")
         db.add(user)
         db.commit()
 
@@ -67,11 +72,11 @@ class TestUserService:
         updated = UserService.update_user(db, user.id, update_data)
 
         assert updated.name == "New Name"
-        assert updated.email == "test@example.com"
+        assert updated.email == unique_email
 
     def test_delete_user(self, db):
         """Test deleting a user"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
         user_id = user.id
@@ -89,7 +94,7 @@ class TestBankAccountService:
 
     def test_create_account(self, db):
         """Test creating a bank account"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -106,7 +111,7 @@ class TestBankAccountService:
 
     def test_get_account(self, db):
         """Test getting a bank account"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -120,7 +125,7 @@ class TestBankAccountService:
 
     def test_update_balance(self, db):
         """Test updating account balance"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -133,7 +138,7 @@ class TestBankAccountService:
 
     def test_get_total_balance(self, db):
         """Test getting total balance"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -152,7 +157,7 @@ class TestCreditCardService:
 
     def test_create_card(self, db):
         """Test creating a credit card"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -170,7 +175,7 @@ class TestCreditCardService:
 
     def test_get_total_balance(self, db):
         """Test getting total balance"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -198,7 +203,7 @@ class TestCreditCardService:
 
     def test_get_total_credit_limit(self, db):
         """Test getting total credit limit"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -229,7 +234,7 @@ class TestInvestmentAccountService:
 
     def test_create_account(self, db):
         """Test creating an investment account"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -246,7 +251,7 @@ class TestInvestmentAccountService:
 
     def test_create_holding(self, db):
         """Test creating an investment holding"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
@@ -273,7 +278,7 @@ class TestInvestmentAccountService:
 
     def test_get_total_value(self, db):
         """Test getting total value"""
-        user = User(email="test@example.com")
+        user = User(email=f"test_{uuid.uuid4().hex[:8]}@example.com")
         db.add(user)
         db.commit()
 
