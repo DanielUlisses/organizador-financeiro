@@ -8,9 +8,7 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { Button } from '@/components/ui/button'
 import { CHART_THEME } from '@/lib/chart-colors'
 import {
-  attachChildCategoryToNotes,
   defaultChildCategory,
-  getDisplayCategory,
   getTransactionTypeFromBackendCategory,
   TRANSACTION_CHILD_CATEGORIES,
   type TransactionType,
@@ -26,8 +24,13 @@ type BankAccount = {
 }
 
 type PaymentRow = AccountPayment & {
+  payment_id?: number
+  occurrence_id?: number
+  payment_type?: string | null
   status?: string | null
   notes?: string | null
+  category_id?: number | null
+  tag_ids?: number[] | null
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -59,18 +62,26 @@ export function AccountsPage() {
   const [transferToId, setTransferToId] = useState<number | null>(null)
   const [transferAmount, setTransferAmount] = useState('0')
   const [transferDescription, setTransferDescription] = useState('Transfer between accounts')
+  const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string }>>([])
+  const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
+  const [editTagIds, setEditTagIds] = useState<number[]>([])
+  const [recurringScope, setRecurringScope] = useState<'only_event' | 'from_event_forward' | 'all_events'>('only_event')
 
   const loadData = async () => {
     setLoading(true)
     setError(null)
     setNotice(null)
     try {
-      const [accountsRes, paymentsRes] = await Promise.all([
+      const [accountsRes, paymentsRes, categoriesRes, tagsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/bank-accounts?user_id=${USER_ID}`),
         fetch(`${API_BASE_URL}/payments?user_id=${USER_ID}&limit=500`),
+        fetch(`${API_BASE_URL}/transaction-metadata/categories?user_id=${USER_ID}`),
+        fetch(`${API_BASE_URL}/transaction-metadata/tags?user_id=${USER_ID}`),
       ])
 
-      if (!accountsRes.ok || !paymentsRes.ok) throw new Error('Failed to load account statement data.')
+      if (!accountsRes.ok || !paymentsRes.ok || !categoriesRes.ok || !tagsRes.ok) {
+        throw new Error('Failed to load account statement data.')
+      }
 
       const rawAccounts = (await accountsRes.json()) as Array<{
         id: number
@@ -94,25 +105,79 @@ export function AccountsPage() {
         description: string
         amount: unknown
         category?: string
+        category_id?: number
         due_date?: string
+        start_date?: string
+        payment_type?: string
         status?: string
         notes?: string
         from_account_id?: number
         to_account_id?: number
+        tag_ids?: number[]
       }>
-      setPayments(
-        rawPayments.map((payment) => ({
-          id: payment.id,
-          description: payment.description,
-          amount: Number(payment.amount),
-          category: payment.category,
-          due_date: payment.due_date,
-          status: payment.status,
-          notes: payment.notes,
-          from_account_id: payment.from_account_id,
-          to_account_id: payment.to_account_id,
+      const recurringPayments = rawPayments.filter((payment) => payment.payment_type === 'recurring')
+      const occurrenceResponses = await Promise.all(
+        recurringPayments.map(async (payment) => {
+          const response = await fetch(`${API_BASE_URL}/payments/${payment.id}/occurrences?user_id=${USER_ID}&limit=500`)
+          if (!response.ok) return { paymentId: payment.id, occurrences: [] as Array<{ id: number; scheduled_date: string; amount: unknown; status?: string; notes?: string }> }
+          const occurrences = (await response.json()) as Array<{ id: number; scheduled_date: string; amount: unknown; status?: string; notes?: string }>
+          return { paymentId: payment.id, occurrences }
+        }),
+      )
+      const recurringByPaymentId = new Map(occurrenceResponses.map((entry) => [entry.paymentId, entry.occurrences]))
+
+      const flattenedPayments: PaymentRow[] = []
+      for (const payment of rawPayments) {
+        if (payment.payment_type !== 'recurring') {
+          flattenedPayments.push({
+            id: payment.id,
+            payment_id: payment.id,
+            occurrence_id: undefined,
+            payment_type: payment.payment_type,
+            description: payment.description,
+            amount: Number(payment.amount),
+            category: payment.category,
+            category_id: payment.category_id,
+            due_date: payment.due_date,
+            status: payment.status,
+            notes: payment.notes,
+            from_account_id: payment.from_account_id,
+            to_account_id: payment.to_account_id,
+            tag_ids: payment.tag_ids ?? [],
+          })
+          continue
+        }
+        const occurrences = recurringByPaymentId.get(payment.id) ?? []
+        for (const occurrence of occurrences) {
+          flattenedPayments.push({
+            id: Number(`${payment.id}${occurrence.id}`),
+            payment_id: payment.id,
+            occurrence_id: occurrence.id,
+            payment_type: payment.payment_type,
+            description: payment.description,
+            amount: Number(occurrence.amount),
+            category: payment.category,
+            category_id: payment.category_id,
+            due_date: occurrence.scheduled_date,
+            status: occurrence.status ?? payment.status,
+            notes: occurrence.notes ?? payment.notes,
+            from_account_id: payment.from_account_id,
+            to_account_id: payment.to_account_id,
+            tag_ids: payment.tag_ids ?? [],
+          })
+        }
+      }
+      setPayments(flattenedPayments)
+      const rawCategories = (await categoriesRes.json()) as Array<{ id: number; transaction_type: string; name: string }>
+      setCategories(
+        rawCategories.map((item) => ({
+          id: item.id,
+          transaction_type: getTransactionTypeFromBackendCategory(item.transaction_type),
+          name: item.name,
         })),
       )
+      const rawTags = (await tagsRes.json()) as Array<{ id: number; name: string }>
+      setTags(rawTags)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -122,6 +187,14 @@ export function AccountsPage() {
 
   useEffect(() => {
     void loadData()
+  }, [])
+
+  useEffect(() => {
+    const handler = () => {
+      void loadData()
+    }
+    window.addEventListener('of:transactions-changed', handler)
+    return () => window.removeEventListener('of:transactions-changed', handler)
   }, [])
 
   useEffect(() => {
@@ -174,7 +247,8 @@ export function AccountsPage() {
       if (!payment.due_date) continue
       const status = (payment.status ?? 'pending').toLowerCase()
       if (!EFFECTIVE_STATUSES.has(status)) continue
-      if (new Date(payment.due_date) >= monthStart) continue
+      const dueDate = new Date(payment.due_date)
+      if (dueDate < monthStart) continue
       rolling -= getSignedAmount(payment, selectedAccountId, false)
     }
     return rolling
@@ -189,7 +263,10 @@ export function AccountsPage() {
     for (const payment of asc) {
       const dateKey = payment.due_date ?? 'No date'
       const current = grouped.get(dateKey) ?? { date: dateKey, closingBalance: running, items: [] }
-      running += getSignedAmount(payment, selectedAccountId)
+      const status = (payment.status ?? 'pending').toLowerCase()
+      if (EFFECTIVE_STATUSES.has(status)) {
+        running += getSignedAmount(payment, selectedAccountId)
+      }
       current.items.push(payment)
       current.closingBalance = running
       grouped.set(dateKey, current)
@@ -255,13 +332,18 @@ export function AccountsPage() {
 
   const runningBalanceSeries = useMemo(() => {
     if (!selectedAccountId || !selectedAccount) return []
-    return buildRunningBalanceSeries(selectedAccount.balance, statementPayments, selectedAccountId)
-  }, [selectedAccountId, selectedAccount, statementPayments])
+    const effectivePayments = statementPayments.filter((payment) =>
+      EFFECTIVE_STATUSES.has((payment.status ?? 'pending').toLowerCase()),
+    )
+    return buildRunningBalanceSeries(carryOverBalance, effectivePayments, selectedAccountId)
+  }, [selectedAccountId, selectedAccount, statementPayments, carryOverBalance])
 
   const cashflowSeries = useMemo(() => {
     const byDay = new Map<string, { inflow: number; outflow: number }>()
     if (!selectedAccountId) return []
     for (const payment of statementPayments) {
+      const status = (payment.status ?? 'pending').toLowerCase()
+      if (!EFFECTIVE_STATUSES.has(status)) continue
       const key = payment.due_date ?? 'unknown'
       const signed = getSignedAmount(payment, selectedAccountId)
       const current = byDay.get(key) ?? { inflow: 0, outflow: 0 }
@@ -275,15 +357,71 @@ export function AccountsPage() {
   }, [statementPayments, selectedAccountId])
 
   const updatePayment = async (paymentId: number, payload: Record<string, unknown>, successMessage: string) => {
-    const response = await fetch(`${API_BASE_URL}/payments/${paymentId}?user_id=${USER_ID}`, {
+    const target = payments.find((payment) => payment.id === paymentId)
+    if (!target) throw new Error('Transaction not found.')
+    const isOccurrence = Boolean(target.occurrence_id)
+    const endpoint = isOccurrence
+      ? `${API_BASE_URL}/payments/occurrences/${target.occurrence_id}?user_id=${USER_ID}`
+      : `${API_BASE_URL}/payments/${target.payment_id ?? paymentId}?user_id=${USER_ID}`
+    const response = await fetch(endpoint, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
     if (!response.ok) throw new Error('Transaction update failed.')
-    const updated = (await response.json()) as PaymentRow
-    setPayments((current) => current.map((payment) => (payment.id === paymentId ? { ...payment, ...updated, amount: Number(updated.amount) } : payment)))
+    if (isOccurrence) {
+      const updated = (await response.json()) as { id: number; amount: unknown; status?: string; notes?: string; scheduled_date?: string }
+      setPayments((current) =>
+        current.map((payment) =>
+          payment.id === paymentId
+            ? {
+                ...payment,
+                amount: Number(updated.amount),
+                status: updated.status ?? payment.status,
+                notes: updated.notes ?? payment.notes,
+                due_date: updated.scheduled_date ?? payment.due_date,
+              }
+            : payment,
+        ),
+      )
+    } else {
+      const updated = (await response.json()) as PaymentRow
+      setPayments((current) => current.map((payment) => (payment.id === paymentId ? { ...payment, ...updated, amount: Number(updated.amount) } : payment)))
+    }
+    window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     setNotice(successMessage)
+  }
+
+  const normalizeDateKey = (value?: string | null) => (value ?? '').slice(0, 10)
+  const toDate = (value: string) => new Date(`${normalizeDateKey(value)}T00:00:00`)
+  const toIsoDate = (value: Date) => value.toISOString().slice(0, 10)
+  const shiftIsoDate = (value: string, deltaDays: number) => {
+    const date = toDate(value)
+    date.setDate(date.getDate() + deltaDays)
+    return toIsoDate(date)
+  }
+
+  const listOccurrences = async (paymentId: number) => {
+    const response = await fetch(`${API_BASE_URL}/payments/${paymentId}/occurrences?user_id=${USER_ID}&limit=1000`)
+    if (!response.ok) throw new Error('Could not load recurring occurrences.')
+    const data = (await response.json()) as Array<{ id: number; scheduled_date: string }>
+    return data
+  }
+
+  const updateOccurrence = async (occurrenceId: number, payload: Record<string, unknown>) => {
+    const response = await fetch(`${API_BASE_URL}/payments/occurrences/${occurrenceId}?user_id=${USER_ID}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!response.ok) throw new Error('Failed to update recurring occurrence.')
+  }
+
+  const deleteOccurrence = async (occurrenceId: number) => {
+    const response = await fetch(`${API_BASE_URL}/payments/occurrences/${occurrenceId}?user_id=${USER_ID}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) throw new Error('Failed to delete recurring occurrence.')
   }
 
   const confirmPayment = async (paymentId: number) => {
@@ -310,28 +448,95 @@ export function AccountsPage() {
       description: payment.description,
       amount: payment.amount.toString(),
       transactionType,
-      categoryChild: getDisplayCategory(payment.category, payment.notes),
+      categoryChild:
+        categories.find((item) => item.id === payment.category_id)?.name ?? defaultChildCategory(transactionType),
       due_date: payment.due_date ?? '',
       status: (payment.status ?? 'pending').toLowerCase(),
       notes: payment.notes ?? '',
     })
+    setEditTagIds(payment.tag_ids ?? [])
+    setRecurringScope('only_event')
   }
 
   const saveEdit = async () => {
     if (!editingPayment) return
     try {
-      await updatePayment(
-        editingPayment.id,
-        {
-          description: editForm.description,
-          amount: Number(editForm.amount),
-          due_date: editForm.due_date,
-          category: editForm.transactionType,
-          status: editForm.status,
-          notes: attachChildCategoryToNotes(editForm.notes, editForm.categoryChild),
-        },
-        'Transaction updated successfully.',
-      )
+      const categoryId =
+        categories.find((item) => item.transaction_type === editForm.transactionType && item.name === editForm.categoryChild)?.id ?? null
+
+      if (editingPayment.occurrence_id && editingPayment.payment_id && editingPayment.payment_type === 'recurring') {
+        if (recurringScope === 'only_event') {
+          await updatePayment(
+            editingPayment.id,
+            {
+              scheduled_date: editForm.due_date,
+              amount: Number(editForm.amount),
+              status: editForm.status,
+              notes: editForm.notes,
+            },
+            'Recurring event updated.',
+          )
+        } else {
+          const occurrences = await listOccurrences(editingPayment.payment_id)
+          const currentDate = normalizeDateKey(editingPayment.due_date)
+          const newDate = normalizeDateKey(editForm.due_date)
+          const dayMs = 24 * 60 * 60 * 1000
+          const deltaDays = Math.round((toDate(newDate).getTime() - toDate(currentDate).getTime()) / dayMs)
+          const selected = occurrences.filter((occurrence) =>
+            recurringScope === 'all_events'
+              ? true
+              : normalizeDateKey(occurrence.scheduled_date) >= currentDate,
+          )
+
+          await Promise.all(
+            selected.map((occurrence) =>
+              updateOccurrence(occurrence.id, {
+                scheduled_date: shiftIsoDate(occurrence.scheduled_date, deltaDays),
+                amount: Number(editForm.amount),
+                status: editForm.status,
+                notes: editForm.notes,
+              }),
+            ),
+          )
+
+          const paymentPayload: Record<string, unknown> = {
+            description: editForm.description,
+            amount: Number(editForm.amount),
+            category: editForm.transactionType,
+            category_id: categoryId,
+            tag_ids: editTagIds,
+            notes: editForm.notes,
+          }
+          if (recurringScope === 'all_events' && deltaDays !== 0) {
+            paymentPayload.start_date = shiftIsoDate(editingPayment.due_date ?? newDate, deltaDays)
+          }
+
+          const paymentResponse = await fetch(`${API_BASE_URL}/payments/${editingPayment.payment_id}?user_id=${USER_ID}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(paymentPayload),
+          })
+          if (!paymentResponse.ok) throw new Error('Failed to update recurring series.')
+          setNotice(recurringScope === 'all_events' ? 'All recurring events updated.' : 'Recurring events updated from this event forward.')
+          await loadData()
+          window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+        }
+      } else {
+        await updatePayment(
+          editingPayment.id,
+          {
+            description: editForm.description,
+            amount: Number(editForm.amount),
+            due_date: editForm.due_date,
+            category: editForm.transactionType,
+            category_id: categoryId,
+            tag_ids: editTagIds,
+            status: editForm.status,
+            notes: editForm.notes,
+          },
+          'Transaction updated successfully.',
+        )
+      }
       setEditingPayment(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Edit action failed.')
@@ -340,11 +545,47 @@ export function AccountsPage() {
 
   const deletePayment = async (paymentId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/payments/${paymentId}?user_id=${USER_ID}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error('Delete action failed.')
+      const target = payments.find((payment) => payment.id === paymentId)
+      if (!target) throw new Error('Transaction not found.')
+
+      if (target.occurrence_id && target.payment_id && target.payment_type === 'recurring') {
+        const currentDate = normalizeDateKey(target.due_date)
+        if (recurringScope === 'only_event') {
+          await deleteOccurrence(target.occurrence_id)
+        } else if (recurringScope === 'all_events') {
+          const response = await fetch(`${API_BASE_URL}/payments/${target.payment_id}?user_id=${USER_ID}`, { method: 'DELETE' })
+          if (!response.ok) throw new Error('Delete action failed.')
+        } else {
+          const occurrences = await listOccurrences(target.payment_id)
+          const toDelete = occurrences.filter((occurrence) => normalizeDateKey(occurrence.scheduled_date) >= currentDate)
+          await Promise.all(toDelete.map((occurrence) => deleteOccurrence(occurrence.id)))
+
+          if (toDelete.length === occurrences.length) {
+            const response = await fetch(`${API_BASE_URL}/payments/${target.payment_id}?user_id=${USER_ID}`, { method: 'DELETE' })
+            if (!response.ok) throw new Error('Delete action failed.')
+          } else {
+            const previousDay = shiftIsoDate(currentDate, -1)
+            const response = await fetch(`${API_BASE_URL}/payments/${target.payment_id}?user_id=${USER_ID}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ end_date: previousDay }),
+            })
+            if (!response.ok) throw new Error('Delete action failed.')
+          }
+        }
+      } else {
+        const endpoint = target.occurrence_id
+          ? `${API_BASE_URL}/payments/occurrences/${target.occurrence_id}?user_id=${USER_ID}`
+          : `${API_BASE_URL}/payments/${target.payment_id ?? paymentId}?user_id=${USER_ID}`
+        const response = await fetch(endpoint, { method: 'DELETE' })
+        if (!response.ok) throw new Error('Delete action failed.')
+      }
+
       setPayments((current) => current.filter((payment) => payment.id !== paymentId))
       setNotice('Transaction deleted.')
       setEditingPayment(null)
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete action failed.')
     }
@@ -369,13 +610,14 @@ export function AccountsPage() {
           to_account_type: 'bank_account',
           to_account_id: transferToId,
           due_date: new Date().toISOString().slice(0, 10),
-          notes: attachChildCategoryToNotes('', 'savings'),
+          notes: '',
         }),
       })
       if (!response.ok) throw new Error('Transfer creation failed.')
       const created = (await response.json()) as PaymentRow
       setPayments((current) => [{ ...created, amount: Number(created.amount) }, ...current])
       setNotice('Transfer created successfully.')
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Transfer action failed.')
     }
@@ -433,9 +675,7 @@ export function AccountsPage() {
               : 'Select an account'}
           </p>
           {hasUnassignedTransactions ? (
-            <p className="mt-2 text-xs text-amber-700">
-              Statement includes unassigned transactions (without linked account). Assign `from/to account` for strict account-only statements.
-            </p>
+            <p className="mt-2 text-xs text-amber-700">Statement includes unassigned transactions. Link accounts for strict statements.</p>
           ) : null}
         </div>
 
@@ -565,7 +805,7 @@ export function AccountsPage() {
                     return (
                       <div key={payment.id} className="grid grid-cols-12 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-background/60">
                         <div className="col-span-4 truncate">{payment.description}</div>
-                        <div className="col-span-2 text-muted-foreground">{getDisplayCategory(payment.category, payment.notes)}</div>
+                        <div className="col-span-2 text-muted-foreground">{categories.find((item) => item.id === payment.category_id)?.name ?? '-'}</div>
                         <div className="col-span-2 text-muted-foreground">{payment.status ?? '-'}</div>
                         <div className={`col-span-2 text-right ${signed >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                           {currency.format(Math.abs(signed))}
@@ -612,6 +852,22 @@ export function AccountsPage() {
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 />
               </label>
+              {editingPayment.occurrence_id && editingPayment.payment_type === 'recurring' ? (
+                <label className="text-sm sm:col-span-2">
+                  Recurring scope
+                  <select
+                    value={recurringScope}
+                    onChange={(event) =>
+                      setRecurringScope(event.target.value as 'only_event' | 'from_event_forward' | 'all_events')
+                    }
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  >
+                    <option value="only_event">Only this event</option>
+                    <option value="from_event_forward">From this event forward</option>
+                    <option value="all_events">All events</option>
+                  </select>
+                </label>
+              ) : null}
               <label className="text-sm">
                 Date
                 <input
@@ -657,9 +913,30 @@ export function AccountsPage() {
                   onChange={(event) => setEditForm((current) => ({ ...current, categoryChild: event.target.value }))}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  {TRANSACTION_CHILD_CATEGORIES[editForm.transactionType].map((option) => (
+                  {(categories.filter((item) => item.transaction_type === editForm.transactionType).map((item) => item.name).length > 0
+                    ? categories.filter((item) => item.transaction_type === editForm.transactionType).map((item) => item.name)
+                    : TRANSACTION_CHILD_CATEGORIES[editForm.transactionType]
+                  ).map((option) => (
                     <option key={option} value={option}>
                       {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm sm:col-span-2">
+                Tags
+                <select
+                  multiple
+                  value={editTagIds.map(String)}
+                  onChange={(event) => {
+                    const ids = Array.from(event.target.selectedOptions).map((option) => Number(option.value))
+                    setEditTagIds(ids)
+                  }}
+                  className="mt-1 h-24 w-full rounded-md border bg-background px-3 py-2"
+                >
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
                     </option>
                   ))}
                 </select>

@@ -91,6 +91,10 @@ class Payment(Base):
     transaction_category = relationship("TransactionCategory", back_populates="payments")
     tags = relationship("TransactionTag", secondary="payment_tags", back_populates="payments")
 
+    @property
+    def tag_ids(self):
+        return [tag.id for tag in self.tags]
+
     def __repr__(self):
         return f"<Payment(id={self.id}, type={self.payment_type}, amount={self.amount}, status={self.status})>"
 

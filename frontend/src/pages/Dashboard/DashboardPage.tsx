@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -20,8 +20,6 @@ import { MonthNavigator } from '@/components/common/MonthNavigator'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { CHART_THEME, getCategoryColor } from '@/lib/chart-colors'
 import {
-  buildBalanceTrend,
-  buildBudgets,
   calculateInvestedPercentage,
   calculateSpentPercentage,
   toNumber,
@@ -57,6 +55,14 @@ type InvestmentTotalResponse = {
   total_value: number
 }
 
+type MetadataCategory = {
+  id: number
+  transaction_type: string
+  name: string
+  color: string
+  budget?: number | null
+}
+
 type WidgetLoadState = 'idle' | 'loading' | 'success' | 'error'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -70,10 +76,12 @@ export function DashboardPage() {
   const [fatalError, setFatalError] = useState<string | null>(null)
 
   const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseBreakdownResponse | null>(null)
-  const [incomeVsExpenses, setIncomeVsExpenses] = useState<IncomeVsExpensesResponse | null>(null)
+  const [incomeVsExpensesMonthly, setIncomeVsExpensesMonthly] = useState<IncomeVsExpensesResponse | null>(null)
+  const [incomeVsExpensesDaily, setIncomeVsExpensesDaily] = useState<IncomeVsExpensesResponse | null>(null)
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [creditCards, setCreditCards] = useState<CreditCard[]>([])
   const [totalInvested, setTotalInvested] = useState(0)
+  const [categories, setCategories] = useState<MetadataCategory[]>([])
 
   const [reportsState, setReportsState] = useState<WidgetLoadState>('idle')
   const [accountsState, setAccountsState] = useState<WidgetLoadState>('idle')
@@ -91,8 +99,14 @@ export function DashboardPage() {
     const format = (d: Date) => d.toISOString().slice(0, 10)
     return { start: format(start), end: format(end) }
   }, [currentMonth])
+  const rolling12Range = useMemo(() => {
+    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 11, 1)
+    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
+    const format = (d: Date) => d.toISOString().slice(0, 10)
+    return { start: format(start), end: format(end) }
+  }, [currentMonth])
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     setLoading(true)
     setFatalError(null)
     setReportsState('loading')
@@ -106,13 +120,17 @@ export function DashboardPage() {
 
     try {
       const base = `${API_BASE_URL}/reports`
-      const [expenseRes, incomeRes, accountsRes, creditCardsRes, investmentsRes] = await Promise.allSettled([
+      const [expenseRes, incomeMonthRes, incomeDayRes, categoriesRes, accountsRes, creditCardsRes, investmentsRes] = await Promise.allSettled([
         fetch(
           `${base}/expense-breakdown?user_id=${userId}&start_date=${dateRange.start}&end_date=${dateRange.end}&breakdown_by=category`,
         ),
         fetch(
-          `${base}/income-vs-expenses?user_id=${userId}&start_date=${dateRange.start}&end_date=${dateRange.end}&granularity=month`,
+          `${base}/income-vs-expenses?user_id=${userId}&start_date=${rolling12Range.start}&end_date=${rolling12Range.end}&granularity=month`,
         ),
+        fetch(
+          `${base}/income-vs-expenses?user_id=${userId}&start_date=${dateRange.start}&end_date=${dateRange.end}&granularity=day`,
+        ),
+        fetch(`${API_BASE_URL}/transaction-metadata/categories?user_id=${userId}`),
         fetch(`${API_BASE_URL}/bank-accounts?user_id=${userId}`),
         fetch(`${API_BASE_URL}/credit-cards?user_id=${userId}`),
         fetch(`${API_BASE_URL}/investment-accounts/${userId}/total-value`),
@@ -120,12 +138,18 @@ export function DashboardPage() {
 
       if (
         expenseRes.status === 'fulfilled' &&
-        incomeRes.status === 'fulfilled' &&
+        incomeMonthRes.status === 'fulfilled' &&
+        incomeDayRes.status === 'fulfilled' &&
+        categoriesRes.status === 'fulfilled' &&
         expenseRes.value.ok &&
-        incomeRes.value.ok
+        incomeMonthRes.value.ok &&
+        incomeDayRes.value.ok &&
+        categoriesRes.value.ok
       ) {
         const rawExpenseData = await expenseRes.value.json()
-        const rawIncomeData = await incomeRes.value.json()
+        const rawIncomeMonthData = await incomeMonthRes.value.json()
+        const rawIncomeDayData = await incomeDayRes.value.json()
+        const rawCategories = (await categoriesRes.value.json()) as unknown
         setExpenseBreakdown({
           total_expenses: toNumber(rawExpenseData.total_expenses),
           items: (rawExpenseData.items ?? []).map((item: { label: string; total: unknown }) => ({
@@ -133,11 +157,11 @@ export function DashboardPage() {
             total: toNumber(item.total),
           })),
         })
-        setIncomeVsExpenses({
-          total_income: toNumber(rawIncomeData.total_income),
-          total_expenses: toNumber(rawIncomeData.total_expenses),
-          net: toNumber(rawIncomeData.net),
-          series: (rawIncomeData.series ?? []).map(
+        setIncomeVsExpensesMonthly({
+          total_income: toNumber(rawIncomeMonthData.total_income),
+          total_expenses: toNumber(rawIncomeMonthData.total_expenses),
+          net: toNumber(rawIncomeMonthData.net),
+          series: (rawIncomeMonthData.series ?? []).map(
             (point: { period: string; income: unknown; expenses: unknown; net: unknown }) => ({
               period: point.period,
               income: toNumber(point.income),
@@ -146,10 +170,26 @@ export function DashboardPage() {
             }),
           ),
         })
+        setIncomeVsExpensesDaily({
+          total_income: toNumber(rawIncomeDayData.total_income),
+          total_expenses: toNumber(rawIncomeDayData.total_expenses),
+          net: toNumber(rawIncomeDayData.net),
+          series: (rawIncomeDayData.series ?? []).map(
+            (point: { period: string; income: unknown; expenses: unknown; net: unknown }) => ({
+              period: point.period,
+              income: toNumber(point.income),
+              expenses: toNumber(point.expenses),
+              net: toNumber(point.net),
+            }),
+          ),
+        })
+        setCategories(Array.isArray(rawCategories) ? (rawCategories as MetadataCategory[]) : [])
         setReportsState('success')
       } else {
         setExpenseBreakdown(null)
-        setIncomeVsExpenses(null)
+        setIncomeVsExpensesMonthly(null)
+        setIncomeVsExpensesDaily(null)
+        setCategories([])
         setReportsState('error')
         setReportsError('Unable to load reports widget data.')
       }
@@ -192,16 +232,23 @@ export function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [dateRange.end, dateRange.start, rolling12Range.end, rolling12Range.start])
 
   useEffect(() => {
     void loadReports()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange.start, dateRange.end])
+  }, [loadReports])
 
-  const totalIncome = incomeVsExpenses?.total_income ?? 0
-  const totalExpenses = incomeVsExpenses?.total_expenses ?? 0
-  const currentBalance = incomeVsExpenses?.net ?? 0
+  useEffect(() => {
+    const handler = () => {
+      void loadReports()
+    }
+    window.addEventListener('of:transactions-changed', handler)
+    return () => window.removeEventListener('of:transactions-changed', handler)
+  }, [loadReports])
+
+  const totalIncome = incomeVsExpensesDaily?.total_income ?? 0
+  const totalExpenses = incomeVsExpensesDaily?.total_expenses ?? 0
+  const currentBalance = accounts.reduce((sum, account) => sum + account.balance, 0)
   const spentPercentage = calculateSpentPercentage(totalIncome, totalExpenses)
   const investedPercentage = calculateInvestedPercentage(totalIncome, totalInvested)
   const expenseCategoryItems = useMemo(
@@ -212,8 +259,38 @@ export function DashboardPage() {
       }),
     [expenseBreakdown],
   )
-  const budgets = buildBudgets(expenseCategoryItems)
-  const balanceTrend = buildBalanceTrend(currentBalance, incomeVsExpenses?.series ?? [])
+  const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
+  const now = new Date()
+  const projectedEntriesAfterMonthStart = (incomeVsExpensesDaily?.series ?? []).reduce((sum, point) => {
+    const pointDate = new Date(point.period)
+    if (pointDate >= monthStart && pointDate <= now) return sum + point.net
+    return sum
+  }, 0)
+  const openingBalance = currentBalance - projectedEntriesAfterMonthStart
+  let rollingBalance = openingBalance
+  const balanceTrend = (incomeVsExpensesDaily?.series ?? [])
+    .slice()
+    .sort((a, b) => a.period.localeCompare(b.period))
+    .map((point) => {
+      rollingBalance += point.net
+      return { label: point.period.slice(5, 10), balance: rollingBalance }
+    })
+  const income12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({ label: point.period, value: point.income }))
+  const expenses12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({ label: point.period, value: point.expenses }))
+  const spentPct12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({
+    label: point.period,
+    value: calculateSpentPercentage(point.income, point.expenses),
+  }))
+  const investedPct12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({
+    label: point.period,
+    value: calculateInvestedPercentage(point.income, Math.max(point.net, 0)),
+  }))
+  const categoryByName = new Map(categories.map((category) => [category.name.toLowerCase(), category]))
+  const budgets = expenseCategoryItems.map((item) => {
+    const metadata = categoryByName.get(item.label.toLowerCase())
+    const configured = metadata?.budget ? toNumber(metadata.budget) : Math.max(item.total * 1.15, item.total + 50)
+    return { category: item.label, configured, consumed: item.total }
+  })
   const configuredBudgetTotal = budgets.reduce((sum, item) => sum + item.configured, 0)
   const consumedBudgetTotal = budgets.reduce((sum, item) => sum + item.consumed, 0)
   const expenseCategoryTotal = expenseCategoryItems.reduce((sum, item) => sum + item.total, 0)
@@ -266,20 +343,48 @@ export function DashboardPage() {
           className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white border-0"
           labelClassName="text-cyan-100"
           hintClassName="text-cyan-100/90"
+          backgroundChart={
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={income12}>
+                <Area type="monotone" dataKey="value" stroke="#dbeafe" fill="#dbeafe" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          }
         />
         <KpiCard
           label="Monthly expenses"
           value={reportsState === 'success' ? currencyFormatter.format(totalExpenses) : '--'}
           accentClassName="text-red-500"
+          backgroundChart={
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={expenses12}>
+                <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.expenses} fill={CHART_THEME.series.expenses} strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          }
         />
         <KpiCard
           label="Invested % of income"
           value={reportsState === 'success' && investmentsState === 'success' ? `${percentFormatter.format(investedPercentage)}%` : '--'}
           hint={investmentsState === 'success' ? currencyFormatter.format(totalInvested) : 'No investment data'}
+          backgroundChart={
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={investedPct12}>
+                <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.income} fill={CHART_THEME.series.income} strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          }
         />
         <KpiCard
           label="Spent % of income"
           value={reportsState === 'success' ? `${percentFormatter.format(spentPercentage)}%` : '--'}
+          backgroundChart={
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={spentPct12}>
+                <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.outflow} fill={CHART_THEME.series.outflow} strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          }
         />
       </div>
 
@@ -380,7 +485,7 @@ export function DashboardPage() {
                     label
                   >
                     {expenseCategoryItems.map((item, idx) => (
-                      <Cell key={`cell-${item.label}`} fill={getCategoryColor(item.label, idx)} />
+                      <Cell key={`cell-${item.label}`} fill={categoryByName.get(item.label.toLowerCase())?.color ?? getCategoryColor(item.label, idx)} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
@@ -392,29 +497,29 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Income vs expenses" subtitle="Monthly cashflow comparison">
+        <ChartCard title="Inflow vs outflow" subtitle="Area relationship for income and expenses over last 12 months">
           {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading income/expense trend...</p> : null}
           {reportsState === 'error' ? <p className="text-sm text-red-500">Income vs expenses unavailable.</p> : null}
-          {reportsState === 'success' && (incomeVsExpenses?.series.length ?? 0) === 0 ? (
+          {reportsState === 'success' && (incomeVsExpensesMonthly?.series.length ?? 0) === 0 ? (
             <p className="text-sm text-muted-foreground">No monthly series available.</p>
           ) : null}
-          {reportsState === 'success' && (incomeVsExpenses?.series.length ?? 0) > 0 ? (
+          {reportsState === 'success' && (incomeVsExpensesMonthly?.series.length ?? 0) > 0 ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={incomeVsExpenses?.series ?? []}>
+                <AreaChart data={incomeVsExpensesMonthly?.series ?? []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="period" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="income" fill={CHART_THEME.series.income} />
-                  <Bar dataKey="expenses" fill={CHART_THEME.series.expenses} />
-                </BarChart>
+                  <Area type="monotone" dataKey="income" stroke={CHART_THEME.series.income} fill={CHART_THEME.series.income} fillOpacity={0.2} />
+                  <Area type="monotone" dataKey="expenses" stroke={CHART_THEME.series.expenses} fill={CHART_THEME.series.expenses} fillOpacity={0.25} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Balance trend during month" subtitle="Background-style progression of estimated current balance">
+        <ChartCard title="Balance trend during month" subtitle="Daily progression for the selected month">
           {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading balance trend...</p> : null}
           {reportsState === 'error' ? <p className="text-sm text-red-500">Balance trend unavailable.</p> : null}
           {reportsState === 'success' ? (

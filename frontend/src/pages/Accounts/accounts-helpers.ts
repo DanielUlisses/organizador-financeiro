@@ -28,14 +28,12 @@ export const getSignedAmount = (payment: AccountPayment, accountId: number, fall
 }
 
 export const buildRunningBalanceSeries = (
-  currentBalance: number,
+  openingBalance: number,
   payments: AccountPayment[],
   accountId: number,
 ) => {
   const sorted = [...payments].sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
-  const monthNet = sorted.reduce((sum, payment) => sum + getSignedAmount(payment, accountId), 0)
-
-  let rolling = currentBalance - monthNet
+  let rolling = openingBalance
   let cumulativeExpenses = 0
   return sorted.map((payment, index) => {
     const signed = getSignedAmount(payment, accountId)

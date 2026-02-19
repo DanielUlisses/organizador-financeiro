@@ -3,8 +3,8 @@ import { Calculator, Plus, X } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
-  attachChildCategoryToNotes,
   defaultChildCategory,
+  getTransactionTypeFromBackendCategory,
   TRANSACTION_CHILD_CATEGORIES,
   type TransactionType,
 } from '@/lib/transaction-taxonomy'
@@ -18,6 +18,16 @@ const getDefaultsByPath = (path: string) => {
   if (path.startsWith('/credit-cards')) return { kind: 'one_time' as TransactionKind, fromType: 'credit_card' as const }
   if (path.startsWith('/investments')) return { kind: 'investment' as TransactionKind, fromType: 'investment' as const }
   return { kind: 'one_time' as TransactionKind, fromType: 'bank_account' as const }
+}
+
+const addByFrequency = (baseDate: Date, frequency: string, steps: number) => {
+  const next = new Date(baseDate)
+  if (frequency === 'daily') next.setDate(next.getDate() + steps)
+  else if (frequency === 'weekly') next.setDate(next.getDate() + 7 * steps)
+  else if (frequency === 'monthly') next.setMonth(next.getMonth() + steps)
+  else if (frequency === 'quarterly') next.setMonth(next.getMonth() + 3 * steps)
+  else if (frequency === 'yearly') next.setFullYear(next.getFullYear() + steps)
+  return next
 }
 
 export function GlobalTransactionFab() {
@@ -47,6 +57,9 @@ export function GlobalTransactionFab() {
   const [toAccountId, setToAccountId] = useState<string>('')
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: number; name: string }>>([])
   const [creditCards, setCreditCards] = useState<Array<{ id: number; name: string }>>([])
+  const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string }>>([])
+  const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([])
   const [recurrenceFrequency, setRecurrenceFrequency] = useState('monthly')
   const [occurrenceCount, setOccurrenceCount] = useState('12')
   const [recurrenceAmountMode, setRecurrenceAmountMode] = useState<'total_split' | 'per_item'>('per_item')
@@ -56,9 +69,11 @@ export function GlobalTransactionFab() {
   useEffect(() => {
     const loadReferences = async () => {
       try {
-        const [accountsRes, cardsRes] = await Promise.all([
+        const [accountsRes, cardsRes, categoriesRes, tagsRes] = await Promise.all([
           fetch(`${API_BASE_URL}/bank-accounts?user_id=${USER_ID}`),
           fetch(`${API_BASE_URL}/credit-cards?user_id=${USER_ID}`),
+          fetch(`${API_BASE_URL}/transaction-metadata/categories?user_id=${USER_ID}`),
+          fetch(`${API_BASE_URL}/transaction-metadata/tags?user_id=${USER_ID}`),
         ])
         if (accountsRes.ok) {
           const data = (await accountsRes.json()) as Array<{ id: number; name: string }>
@@ -67,6 +82,20 @@ export function GlobalTransactionFab() {
         if (cardsRes.ok) {
           const data = (await cardsRes.json()) as Array<{ id: number; name: string }>
           setCreditCards(data)
+        }
+        if (categoriesRes.ok) {
+          const data = (await categoriesRes.json()) as Array<{ id: number; transaction_type: string; name: string }>
+          setCategories(
+            data.map((item) => ({
+              id: item.id,
+              transaction_type: getTransactionTypeFromBackendCategory(item.transaction_type),
+              name: item.name,
+            })),
+          )
+        }
+        if (tagsRes.ok) {
+          const data = (await tagsRes.json()) as Array<{ id: number; name: string }>
+          setTags(data)
         }
       } catch {
         // Keep modal functional even if lookup load fails.
@@ -85,6 +114,7 @@ export function GlobalTransactionFab() {
     setTransactionType(defaultType)
     setCategoryChild(defaultChildCategory(defaultType))
     setNotes('')
+    setSelectedTagIds([])
     setAmount('0')
     setError(null)
     setNotice(null)
@@ -107,6 +137,13 @@ export function GlobalTransactionFab() {
     }
 
     try {
+      if (!fromAccountId) {
+        setError('Select an account.')
+        return
+      }
+
+      const selectedCategory = categories.find((item) => item.transaction_type === transactionType && item.name === categoryChild)
+
       if (kind === 'one_time') {
         const isIncome = transactionType === 'income'
         const sourceId = fromAccountId ? Number(fromAccountId) : null
@@ -120,22 +157,29 @@ export function GlobalTransactionFab() {
             description,
             amount: numericAmount,
             category: transactionType,
+            category_id: selectedCategory?.id ?? null,
+            tag_ids: selectedTagIds,
             currency: 'USD',
             due_date: dueDate,
             from_account_type: finalFromId ? fromAccountType : null,
             from_account_id: finalFromId,
             to_account_type: finalToId ? 'bank_account' : null,
             to_account_id: finalToId,
-            notes: attachChildCategoryToNotes(notes, categoryChild),
+            notes,
           }),
         })
         if (!response.ok) throw new Error('Failed to create transaction.')
         setNotice('Transaction created.')
+        window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+        setOpen(false)
         return
       }
 
       const count = Math.max(1, Number(occurrenceCount))
       const recurringAmount = recurrenceAmountMode === 'total_split' ? numericAmount / count : numericAmount
+      const startDateObj = new Date(`${dueDate}T00:00:00`)
+      const computedEndDate = addByFrequency(startDateObj, recurrenceFrequency, Math.max(0, count - 1))
+      const computedEndDateIso = computedEndDate.toISOString().slice(0, 10)
       const response = await fetch(`${API_BASE_URL}/payments/recurring?user_id=${USER_ID}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,22 +187,30 @@ export function GlobalTransactionFab() {
           description,
           amount: recurringAmount,
           category: transactionType,
+          category_id: selectedCategory?.id ?? null,
+          tag_ids: selectedTagIds,
           currency: 'USD',
           frequency: recurrenceFrequency,
           start_date: dueDate,
-          end_date: null,
+          end_date: computedEndDateIso,
           from_account_type: fromAccountType,
           from_account_id: fromAccountId ? Number(fromAccountId) : null,
-          notes: attachChildCategoryToNotes(
+          notes:
             recurrenceAmountMode === 'total_split'
-              ? `Created from total ${numericAmount.toFixed(2)} split into ${count} recurrences.`
+              ? `Created from total ${numericAmount.toFixed(2)} split into ${count} recurrences. ${notes}`.trim()
               : notes,
-            categoryChild,
-          ),
         }),
       })
       if (!response.ok) throw new Error('Failed to create recurring transaction.')
+      const created = (await response.json()) as { id: number }
+      const generateResponse = await fetch(
+        `${API_BASE_URL}/payments/${created.id}/generate-occurrences?user_id=${USER_ID}&up_to_date=${computedEndDateIso}`,
+        { method: 'POST' },
+      )
+      if (!generateResponse.ok) throw new Error('Recurring created but failed to generate future items.')
       setNotice('Recurring transaction created.')
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+      setOpen(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Create action failed.')
     }
@@ -239,9 +291,30 @@ export function GlobalTransactionFab() {
                   onChange={(event) => setCategoryChild(event.target.value)}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  {TRANSACTION_CHILD_CATEGORIES[transactionType].map((option) => (
+                  {(categories.filter((item) => item.transaction_type === transactionType).map((item) => item.name).length > 0
+                    ? categories.filter((item) => item.transaction_type === transactionType).map((item) => item.name)
+                    : TRANSACTION_CHILD_CATEGORIES[transactionType]
+                  ).map((option) => (
                     <option key={option} value={option}>
                       {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm sm:col-span-2">
+                Tags
+                <select
+                  multiple
+                  value={selectedTagIds.map(String)}
+                  onChange={(event) => {
+                    const ids = Array.from(event.target.selectedOptions).map((option) => Number(option.value))
+                    setSelectedTagIds(ids)
+                  }}
+                  className="mt-1 h-24 w-full rounded-md border bg-background px-3 py-2"
+                >
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
                     </option>
                   ))}
                 </select>
