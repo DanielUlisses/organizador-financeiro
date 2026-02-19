@@ -50,24 +50,24 @@ Core goals:
 
 ## Phase 1: Dashboard
 
-- [ ] KPI cards:
+- [x] KPI cards:
   - Current balance
   - Monthly expenses
   - Monthly income
   - Investment percentage over income
   - Expense percentage over income
-- [ ] Balance split:
+- [x] Balance split:
   - By account
   - By credit card
-- [ ] Budgets overview:
+- [x] Budgets overview:
   - Configured budgets
   - Consumed amount
-- [ ] Charts and graphs:
+- [x] Charts and graphs:
   - Balance trend with chart background on balance card
   - Income vs expenses trend
   - Budget consumption charts
-- [ ] Month navigation for past and future months
-- [ ] Independent loading/empty/error states per dashboard widget
+- [x] Month navigation for past and future months
+- [x] Independent loading/empty/error states per dashboard widget
 
 ## Phase 2: Accounts
 
