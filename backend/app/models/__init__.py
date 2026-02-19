@@ -18,6 +18,13 @@ from app.models.payment import (
     PaymentOccurrence,
     RecurringPaymentOverride,
 )
+from app.models.transaction_metadata import (
+    TransactionType,
+    BudgetScope,
+    TransactionCategory,
+    TransactionTag,
+    payment_tags,
+)
 
 __all__ = [
     "Base",
@@ -36,4 +43,9 @@ __all__ = [
     "PaymentCategory",
     "PaymentOccurrence",
     "RecurringPaymentOverride",
+    "TransactionType",
+    "BudgetScope",
+    "TransactionCategory",
+    "TransactionTag",
+    "payment_tags",
 ]

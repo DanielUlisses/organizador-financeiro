@@ -116,14 +116,19 @@ class ReportsService:
         seen_payment_ids = set()
 
         for occurrence, payment in occurrence_rows:
-            category = payment.category.value if payment.category else "other"
+            category = (
+                payment.transaction_category.name
+                if payment.transaction_category
+                else (payment.category.value if payment.category else "other")
+            )
+            transaction_type = payment.category.value if payment.category else "expense"
             entries.append(
                 {
                     "payment_id": payment.id,
                     "txn_date": occurrence.scheduled_date,
                     "amount": occurrence.amount,
                     "category": category,
-                    "is_income": category == "income",
+                    "is_income": transaction_type == "income",
                 }
             )
             seen_payment_ids.add(payment.id)
@@ -141,14 +146,19 @@ class ReportsService:
 
         one_time_rows = one_time_query.all()
         for payment in one_time_rows:
-            category = payment.category.value if payment.category else "other"
+            category = (
+                payment.transaction_category.name
+                if payment.transaction_category
+                else (payment.category.value if payment.category else "other")
+            )
+            transaction_type = payment.category.value if payment.category else "expense"
             entries.append(
                 {
                     "payment_id": payment.id,
                     "txn_date": payment.due_date,
                     "amount": payment.amount,
                     "category": category,
-                    "is_income": category == "income",
+                    "is_income": transaction_type == "income",
                 }
             )
 

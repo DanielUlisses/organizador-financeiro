@@ -56,6 +56,7 @@ class Payment(Base):
     amount = Column(Numeric(15, 2), nullable=False)
     currency = Column(String(3), default="USD", nullable=False)
     category = Column(Enum(PaymentCategory), nullable=True)
+    category_id = Column(Integer, ForeignKey("transaction_categories.id"), nullable=True, index=True)
     
     # Account references (can be bank account or credit card)
     from_account_type = Column(String, nullable=True)  # "bank_account" or "credit_card"
@@ -87,6 +88,8 @@ class Payment(Base):
     user = relationship("User", backref="payments")
     occurrences = relationship("PaymentOccurrence", back_populates="payment", cascade="all, delete-orphan")
     overrides = relationship("RecurringPaymentOverride", back_populates="payment", cascade="all, delete-orphan")
+    transaction_category = relationship("TransactionCategory", back_populates="payments")
+    tags = relationship("TransactionTag", secondary="payment_tags", back_populates="payments")
 
     def __repr__(self):
         return f"<Payment(id={self.id}, type={self.payment_type}, amount={self.amount}, status={self.status})>"

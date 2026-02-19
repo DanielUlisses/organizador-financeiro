@@ -71,15 +71,15 @@ Core goals:
 
 ## Phase 2: Accounts
 
-- [ ] Account statement page for selected month
-- [ ] Month navigation (past/future)
-- [ ] Account balance health charts
-- [ ] Transaction actions:
+- [x] Account statement page for selected month
+- [x] Month navigation (past/future)
+- [x] Account balance health charts
+- [x] Transaction actions:
   - Confirm transaction (consolidation)
   - Update transaction
   - Delete transaction
   - Transfer between accounts
-- [ ] Sorting and filtering in statement table
+- [x] Sorting and filtering in statement table
 
 ## Phase 3: Credit Cards
 

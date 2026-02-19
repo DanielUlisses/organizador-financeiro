@@ -18,6 +18,7 @@ import { ChartCard } from '@/components/common/ChartCard'
 import { KpiCard } from '@/components/common/KpiCard'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
 import { SectionHeader } from '@/components/common/SectionHeader'
+import { CHART_THEME, getCategoryColor } from '@/lib/chart-colors'
 import {
   buildBalanceTrend,
   buildBudgets,
@@ -83,8 +84,6 @@ export function DashboardPage() {
   const [accountsError, setAccountsError] = useState<string | null>(null)
   const [creditCardsError, setCreditCardsError] = useState<string | null>(null)
   const [investmentsError, setInvestmentsError] = useState<string | null>(null)
-
-  const colors = ['#0ea5e9', '#22c55e', '#f97316', '#a855f7', '#ef4444', '#14b8a6']
 
   const dateRange = useMemo(() => {
     const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
@@ -205,10 +204,19 @@ export function DashboardPage() {
   const currentBalance = incomeVsExpenses?.net ?? 0
   const spentPercentage = calculateSpentPercentage(totalIncome, totalExpenses)
   const investedPercentage = calculateInvestedPercentage(totalIncome, totalInvested)
-  const budgets = buildBudgets(expenseBreakdown?.items ?? [])
+  const expenseCategoryItems = useMemo(
+    () =>
+      (expenseBreakdown?.items ?? []).filter((item) => {
+        const label = item.label.toLowerCase()
+        return label !== 'transfer' && label !== 'income'
+      }),
+    [expenseBreakdown],
+  )
+  const budgets = buildBudgets(expenseCategoryItems)
   const balanceTrend = buildBalanceTrend(currentBalance, incomeVsExpenses?.series ?? [])
   const configuredBudgetTotal = budgets.reduce((sum, item) => sum + item.configured, 0)
   const consumedBudgetTotal = budgets.reduce((sum, item) => sum + item.consumed, 0)
+  const expenseCategoryTotal = expenseCategoryItems.reduce((sum, item) => sum + item.total, 0)
   const widgetErrors = [reportsError, accountsError, creditCardsError, investmentsError].filter(Boolean)
 
   return (
@@ -240,7 +248,13 @@ export function DashboardPage() {
           backgroundChart={
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={balanceTrend}>
-                <Area type="monotone" dataKey="balance" stroke="#dbeafe" fill="#93c5fd" strokeWidth={2} />
+                <Area
+                  type="monotone"
+                  dataKey="balance"
+                  stroke={CHART_THEME.layout.mutedLine}
+                  fill={CHART_THEME.layout.mutedLine}
+                  strokeWidth={2}
+                />
               </AreaChart>
             </ResponsiveContainer>
           }
@@ -284,7 +298,7 @@ export function DashboardPage() {
                   <XAxis dataKey="name" hide={accounts.length > 4} />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="balance" fill="#5b8def" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="balance" fill={CHART_THEME.series.balance} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -305,7 +319,7 @@ export function DashboardPage() {
                   <XAxis dataKey="name" hide={creditCards.length > 4} />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="current_balance" fill="#9163ff" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="current_balance" fill={CHART_THEME.series.expenses} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -345,25 +359,28 @@ export function DashboardPage() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Expense breakdown by category" subtitle={`Total expenses: ${currencyFormatter.format(totalExpenses)}`}>
+        <ChartCard
+          title="Expense breakdown by category"
+          subtitle={`Total expenses categories: ${currencyFormatter.format(expenseCategoryTotal)}`}
+        >
           {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading expense categories...</p> : null}
           {reportsState === 'error' ? <p className="text-sm text-red-500">Expense breakdown unavailable.</p> : null}
-          {reportsState === 'success' && (expenseBreakdown?.items.length ?? 0) === 0 ? (
+          {reportsState === 'success' && expenseCategoryItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">No expense categories found for this month.</p>
           ) : null}
-          {reportsState === 'success' && (expenseBreakdown?.items.length ?? 0) > 0 ? (
+          {reportsState === 'success' && expenseCategoryItems.length > 0 ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={expenseBreakdown?.items ?? []}
+                    data={expenseCategoryItems}
                     dataKey="total"
                     nameKey="label"
                     outerRadius={100}
                     label
                   >
-                    {(expenseBreakdown?.items ?? []).map((_, idx) => (
-                      <Cell key={`cell-${idx}`} fill={colors[idx % colors.length]} />
+                    {expenseCategoryItems.map((item, idx) => (
+                      <Cell key={`cell-${item.label}`} fill={getCategoryColor(item.label, idx)} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
@@ -389,8 +406,8 @@ export function DashboardPage() {
                   <XAxis dataKey="period" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="income" fill="#22c55e" />
-                  <Bar dataKey="expenses" fill="#ef4444" />
+                  <Bar dataKey="income" fill={CHART_THEME.series.income} />
+                  <Bar dataKey="expenses" fill={CHART_THEME.series.expenses} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -406,15 +423,15 @@ export function DashboardPage() {
                 <AreaChart data={balanceTrend}>
                   <defs>
                     <linearGradient id="balance-gradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b5bff" stopOpacity={0.5} />
-                      <stop offset="95%" stopColor="#3b5bff" stopOpacity={0.05} />
+                    <stop offset="5%" stopColor={CHART_THEME.series.balance} stopOpacity={0.5} />
+                    <stop offset="95%" stopColor={CHART_THEME.series.balance} stopOpacity={0.05} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Area type="monotone" dataKey="balance" stroke="#3b5bff" fill="url(#balance-gradient)" />
+                  <Area type="monotone" dataKey="balance" stroke={CHART_THEME.series.balance} fill="url(#balance-gradient)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

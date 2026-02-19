@@ -16,6 +16,8 @@ class PaymentBase(BaseModel):
     amount: Decimal
     currency: str = "USD"
     category: Optional[PaymentCategory] = None
+    category_id: Optional[int] = None
+    tag_ids: Optional[List[int]] = None
     from_account_type: Optional[str] = None  # "bank_account" or "credit_card"
     from_account_id: Optional[int] = None
     to_account_type: Optional[str] = None
@@ -43,6 +45,8 @@ class PaymentUpdate(BaseModel):
     amount: Optional[Decimal] = None
     currency: Optional[str] = None
     category: Optional[PaymentCategory] = None
+    category_id: Optional[int] = None
+    tag_ids: Optional[List[int]] = None
     from_account_type: Optional[str] = None
     from_account_id: Optional[int] = None
     to_account_type: Optional[str] = None

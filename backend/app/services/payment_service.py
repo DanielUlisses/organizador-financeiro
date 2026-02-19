@@ -9,6 +9,7 @@ from app.models.payment import (
     PaymentOccurrence,
     RecurringPaymentOverride,
 )
+from app.models.transaction_metadata import TransactionTag
 from app.schemas.payment import (
     OneTimePaymentCreate,
     RecurringPaymentCreate,
@@ -60,10 +61,17 @@ class PaymentService:
     ) -> Payment:
         """Create a one-time payment"""
         payment_dict = payment_data.model_dump()
+        tag_ids = payment_dict.pop("tag_ids", None) or []
         payment_dict['payment_type'] = PaymentType.ONE_TIME
         payment_dict['status'] = PaymentStatus.PENDING
         
         db_payment = Payment(user_id=user_id, **payment_dict)
+        if tag_ids:
+            db_payment.tags = (
+                db.query(TransactionTag)
+                .filter(TransactionTag.user_id == user_id, TransactionTag.id.in_(tag_ids))
+                .all()
+            )
         db.add(db_payment)
         db.flush()  # Get the payment ID before creating occurrence
         
@@ -88,6 +96,7 @@ class PaymentService:
     ) -> Payment:
         """Create a recurring payment"""
         payment_dict = payment_data.model_dump()
+        tag_ids = payment_dict.pop("tag_ids", None) or []
         payment_dict['payment_type'] = PaymentType.RECURRING
         payment_dict['status'] = PaymentStatus.PENDING
         
@@ -99,6 +108,12 @@ class PaymentService:
         payment_dict['next_due_date'] = next_due
         
         db_payment = Payment(user_id=user_id, **payment_dict)
+        if tag_ids:
+            db_payment.tags = (
+                db.query(TransactionTag)
+                .filter(TransactionTag.user_id == user_id, TransactionTag.id.in_(tag_ids))
+                .all()
+            )
         db.add(db_payment)
         db.flush()  # Get the payment ID
         
@@ -130,6 +145,7 @@ class PaymentService:
             return None
         
         update_data = payment_data.model_dump(exclude_unset=True)
+        tag_ids = update_data.pop("tag_ids", None)
         
         # Handle next_due_date recalculation for recurring payments
         if db_payment.payment_type == PaymentType.RECURRING:
@@ -141,6 +157,13 @@ class PaymentService:
         
         for field, value in update_data.items():
             setattr(db_payment, field, value)
+
+        if tag_ids is not None:
+            db_payment.tags = (
+                db.query(TransactionTag)
+                .filter(TransactionTag.user_id == user_id, TransactionTag.id.in_(tag_ids))
+                .all()
+            )
         
         db.commit()
         db.refresh(db_payment)

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { GlobalTransactionFab } from '@/components/common/GlobalTransactionFab'
 import { Header } from '@/layouts/Header/Header'
 import { Sidebar } from '@/layouts/Sidebar/Sidebar'
 
@@ -21,6 +22,7 @@ export function AppLayout() {
             <Outlet />
           </div>
         </main>
+        <GlobalTransactionFab />
       </div>
     </div>
   )
