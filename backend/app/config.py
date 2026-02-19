@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     
     # Environment
     environment: str = "development"
+
+    # Uploads / static user files
+    uploads_dir: str = "/app/storage/uploads"
+    uploads_public_base_url: str = "/uploads"
     
     class Config:
         env_file = ".env"

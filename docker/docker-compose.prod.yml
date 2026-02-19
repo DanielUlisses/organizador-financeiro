@@ -37,8 +37,14 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-change-me-in-production}
       AUTH_URL: ${AUTH_URL:-http://localhost:8000}
       UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      UPLOADS_DIR: ${UPLOADS_DIR:-/app/storage/uploads}
+      UPLOADS_PUBLIC_BASE_URL: ${UPLOADS_PUBLIC_BASE_URL:-/uploads}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - type: bind
+        source: ${UPLOADS_HOST_PATH:-/opt/organizador/uploads}
+        target: /app/storage/uploads
     networks:
       - organizador-prod-network
 
@@ -48,6 +54,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
+        VITE_UPLOADS_PUBLIC_BASE_URL: ${UPLOADS_PUBLIC_BASE_URL:-/uploads}
     container_name: organizador-financeiro-frontend-prod
     restart: unless-stopped
     depends_on:

@@ -1,6 +1,9 @@
 """FastAPI application entry point"""
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.api.routes import health, auth
 
@@ -38,6 +41,11 @@ app.include_router(reports.router)
 # Note: better-auth will be integrated on the frontend side
 # Backend will validate sessions via cookies/JWT tokens
 # See app/api/routes/auth.py for session validation endpoints
+
+# Serve uploaded user files from mounted external storage.
+uploads_dir = Path(settings.uploads_dir)
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount(settings.uploads_public_base_url, StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 
 @app.get("/")
