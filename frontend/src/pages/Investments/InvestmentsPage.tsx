@@ -748,11 +748,14 @@ export function InvestmentsPage() {
     for (const item of holdings) {
       map.set(item.asset_type, (map.get(item.asset_type) ?? 0) + item.current_value)
     }
-    return [...map.entries()].map(([assetType, total]) => ({
-      label: ASSET_TYPE_OPTIONS.find((option) => option.value === assetType)?.label ?? assetType,
-      total,
-    }))
-  }, [holdings])
+    return [...map.entries()].map(([assetType, total]) => {
+      const option = ASSET_TYPE_OPTIONS.find((item) => item.value === assetType)
+      return {
+        label: option ? t(option.labelKey) : assetType,
+        total,
+      }
+    })
+  }, [holdings, t])
   const totalCurrentValue = holdings.reduce((sum, item) => sum + item.current_value, 0)
 
   const investedAreaSeries = useMemo(() => {
@@ -796,7 +799,8 @@ export function InvestmentsPage() {
       const meta = parseSellMeta(row.notes)
       if (!meta) continue
       const month = row.due_date.slice(0, 7)
-      const label = ASSET_TYPE_OPTIONS.find((item) => item.value === meta.assetType)?.label ?? meta.assetType
+      const option = ASSET_TYPE_OPTIONS.find((item) => item.value === meta.assetType)
+      const label = option ? t(option.labelKey) : meta.assetType
       if (!grouped.has(month)) grouped.set(month, new Map<string, number>())
       const byAsset = grouped.get(month)!
       byAsset.set(label, (byAsset.get(label) ?? 0) + meta.profit)
@@ -812,7 +816,7 @@ export function InvestmentsPage() {
       }),
       keys: [...allAssets],
     }
-  }, [schedules])
+  }, [schedules, t])
 
   return (
     <div className="space-y-6">

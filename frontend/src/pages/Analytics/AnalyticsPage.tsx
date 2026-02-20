@@ -648,7 +648,7 @@ export function AnalyticsPage() {
   )
 
   const renderCategoryRow = (row: { category: string; values: number[]; total: number }, tone: 'income' | 'expense') => (
-    <tr key={`${tone}-${row.category}`} className="border-b">
+    <tr key={`${tone}-${row.category}`} className="border-b border-border/60">
       <td className="py-2 pr-3 font-medium">{row.category === UNKNOWN_CATEGORY_KEY ? t('common.noCategory') : row.category}</td>
       {row.values.map((value, index) => (
         <td key={`${tone}-${row.category}-${tableData.months[index].key}`} className="px-3 py-2 text-right whitespace-nowrap">
@@ -659,15 +659,17 @@ export function AnalyticsPage() {
     </tr>
   )
 
-  const subtotalRowClass = 'bg-muted/40'
+  const incomeSubtotalRowClass = 'border-b border-emerald-300/70 bg-emerald-50/70 dark:border-emerald-800/60 dark:bg-emerald-900/20'
+  const expenseSubtotalRowClass = 'border-b border-rose-300/70 bg-rose-50/70 dark:border-rose-800/60 dark:bg-rose-900/20'
+  const netTotalRowClass = 'bg-muted/45'
 
   const netClass = (value: number) => (value >= 0 ? 'text-emerald-600' : 'text-red-600')
 
   const incomeExpenseTable = (
     <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
+      <table className="min-w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b text-left">
+          <tr className="border-b border-border/70 bg-muted/35 text-left">
             <th className="py-2 pr-3">{t('analytics.table.category')}</th>
             {tableData.months.map((month) => (
               <th key={month.key} className="px-3 py-2 text-right whitespace-nowrap">
@@ -679,7 +681,7 @@ export function AnalyticsPage() {
         </thead>
         <tbody>
           {tableData.incomeRows.map((row) => renderCategoryRow(row, 'income'))}
-          <tr className={cn('border-b font-semibold', subtotalRowClass)}>
+          <tr className={cn('font-semibold text-emerald-700 dark:text-emerald-300', incomeSubtotalRowClass)}>
             <td className="py-2 pr-3">{t('analytics.table.incomeSubtotal')}</td>
             {tableData.incomeSubtotal.map((value, index) => (
               <td key={`income-subtotal-${tableData.months[index].key}`} className="px-3 py-2 text-right whitespace-nowrap">
@@ -690,7 +692,7 @@ export function AnalyticsPage() {
           </tr>
 
           {tableData.expenseRows.map((row) => renderCategoryRow(row, 'expense'))}
-          <tr className={cn('border-b font-semibold', subtotalRowClass)}>
+          <tr className={cn('font-semibold text-rose-700 dark:text-rose-300', expenseSubtotalRowClass)}>
             <td className="py-2 pr-3">{t('analytics.table.expenseSubtotal')}</td>
             {tableData.expenseSubtotal.map((value, index) => (
               <td key={`expense-subtotal-${tableData.months[index].key}`} className="px-3 py-2 text-right whitespace-nowrap">
@@ -700,7 +702,7 @@ export function AnalyticsPage() {
             {renderAmountCell(tableData.expenseTotal)}
           </tr>
 
-          <tr className="font-semibold">
+          <tr className={cn('font-semibold', netTotalRowClass)}>
             <td className="py-2 pr-3">{t('analytics.table.netTotal')}</td>
             {tableData.netByMonth.map((value, index) => (
               <td key={`net-total-${tableData.months[index].key}`} className={cn('px-3 py-2 text-right whitespace-nowrap', netClass(value))}>

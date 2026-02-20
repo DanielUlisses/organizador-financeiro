@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, User } from 'lucide-react'
+import { LogOut, Menu, Moon, Sun, User } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/app/providers/useAuth'
 import { useTheme } from '@/app/providers/ThemeProvider'
 import { Button } from '@/components/ui/button'
+import { useReducedVisualEffects } from '@/hooks/useReducedVisualEffects'
 import { HeaderNotifications } from '@/layouts/Header/HeaderNotifications'
 import { SUPPORTED_LANGUAGES, type SupportedLanguageCode } from '@/i18n'
 
@@ -27,17 +28,16 @@ function profileImageUrl(path: string | null): string {
 }
 
 type HeaderProps = {
-  collapsed: boolean
   onOpenSidebar: () => void
-  onToggleCollapsed: () => void
 }
 
-export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderProps) {
+export function Header({ onOpenSidebar }: HeaderProps) {
   const navigate = useNavigate()
   const { signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation()
   const [profile, setProfile] = useState<HeaderProfile | null>(null)
+  const reducedVisualEffects = useReducedVisualEffects()
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/users/${USER_ID}`)
@@ -51,28 +51,23 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
   const avatarUrl = profile ? profileImageUrl(profile.profile_image_path) : ''
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-3 backdrop-blur md:px-6">
+    <header
+      className={`sticky top-0 z-20 mx-4 mt-4 flex h-16 items-center justify-between rounded-3xl border border-white/60 bg-white/85 px-3 shadow-sm md:mx-6 md:px-6 dark:border-white/10 dark:bg-slate-900/70 ${
+        reducedVisualEffects ? '' : 'backdrop-blur'
+      }`}
+    >
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={onOpenSidebar} aria-label={t('common.openMenu')} className="md:hidden">
+        <Button variant="outline" size="icon" onClick={onOpenSidebar} aria-label={t('common.openMenu')}>
           <Menu className="h-4 w-4" />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggleCollapsed}
-          aria-label={t('common.toggleSidebar')}
-          className="hidden md:inline-flex"
-        >
-          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-        </Button>
         <h1 className="flex items-center gap-2">
-          <span className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg">
+          <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10">
             <img
               src="/logo.svg"
               alt=""
-              className="h-9 w-9 select-none object-contain object-center"
-              width={36}
-              height={36}
+              className="h-8 w-8 select-none object-contain object-center"
+              width={32}
+              height={32}
               decoding="async"
             />
           </span>
@@ -81,7 +76,7 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex items-center rounded-md border bg-card">
+        <div className="flex items-center rounded-xl border bg-card/80">
           {SUPPORTED_LANGUAGES.map(({ code, label }) => (
             <button
               key={code}
@@ -116,7 +111,7 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
 
         <Link
           to="/profile"
-          className="flex items-center gap-2 rounded-md border bg-card px-2 py-1 hover:bg-muted/50"
+          className="flex items-center gap-2 rounded-xl border bg-card/80 px-2 py-1 hover:bg-muted/50"
         >
           <div className="hidden text-right text-xs leading-tight sm:block">
             <div className="font-medium">{displayName}</div>

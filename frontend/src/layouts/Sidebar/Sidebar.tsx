@@ -1,12 +1,12 @@
-import { CreditCard, Gauge, Landmark, LineChart, Settings, User, Wallet } from 'lucide-react'
+import { CreditCard, Gauge, Landmark, LineChart, Settings, User, Wallet, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { useReducedVisualEffects } from '@/hooks/useReducedVisualEffects'
 
 type SidebarProps = {
-  collapsed: boolean
-  mobileOpen: boolean
-  onCloseMobile: () => void
+  open: boolean
+  onClose: () => void
 }
 
 const linkKeys = [
@@ -20,58 +20,65 @@ const linkKeys = [
   { to: '/profile', key: 'nav.profile', icon: User },
 ]
 
-export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) {
+export function Sidebar({ open, onClose }: SidebarProps) {
   const { t } = useTranslation()
+  const reducedVisualEffects = useReducedVisualEffects()
   return (
     <>
       <div
-        className={`fixed inset-0 z-30 bg-black/40 md:hidden ${mobileOpen ? 'block' : 'hidden'}`}
-        onClick={onCloseMobile}
+        className={`fixed inset-0 z-30 bg-slate-950/45 ${reducedVisualEffects ? '' : 'backdrop-blur-sm'} ${open ? 'block' : 'hidden'}`}
+        onClick={onClose}
       />
       <aside
-        className={`fixed left-0 top-0 z-40 h-screen border-r bg-card/95 transition-all md:static md:z-auto ${
-          collapsed ? 'w-20' : 'w-64'
-        } ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        className={`fixed left-0 top-0 z-40 h-screen w-72 p-3 transition-transform ${open ? 'translate-x-0' : '-translate-x-full'}`}
         data-testid="sidebar-root"
-        data-collapsed={collapsed ? 'true' : 'false'}
       >
-        <div className="flex h-14 items-center gap-2 border-b px-3">
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg">
-            <img
-              src="/logo.svg"
-              alt=""
-              className="h-9 w-9 select-none object-contain object-center"
-              width={36}
-              height={36}
-              decoding="async"
-            />
-          </span>
-          {!collapsed ? <span className="truncate text-sm font-semibold tracking-tight">{t('common.appName')}</span> : null}
-        </div>
-        <div className="px-3 pt-3 text-[10px] uppercase tracking-wide text-muted-foreground">{collapsed ? t('common.nav') : t('common.navigation')}</div>
-        <nav className="space-y-1 p-2">
-          {linkKeys.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              onClick={onCloseMobile}
-              className={({ isActive }) =>
-                `flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-                  isActive
-                    ? 'bg-primary/10 text-primary border border-primary/20'
-                    : 'text-muted-foreground hover:bg-accent'
-                }`
-              }
-            >
-              <link.icon className="h-4 w-4 shrink-0" />
-              {!collapsed ? <span>{t(link.key)}</span> : null}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="mt-auto p-3">
-          <Button className="w-full" variant="outline" onClick={onCloseMobile}>
-            {collapsed ? '>' : t('common.close')}
-          </Button>
+        <div className={`flex h-full flex-col rounded-3xl p-3 ${reducedVisualEffects ? 'border bg-card shadow-sm' : 'of-surface'}`}>
+          <div className="flex h-14 items-center justify-between gap-3 rounded-2xl px-2">
+            <div className="flex items-center gap-3">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10">
+              <img
+                src="/logo.svg"
+                alt=""
+                className="h-8 w-8 select-none object-contain object-center"
+                width={32}
+                height={32}
+                decoding="async"
+              />
+            </span>
+            <span className="truncate text-sm font-semibold tracking-tight">{t('common.appName')}</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-9 w-9">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="px-2 pt-3 text-[10px] uppercase tracking-[0.22em] text-muted-foreground">{t('common.navigation')}</div>
+          <nav className="mt-2 space-y-1 p-1">
+            {linkKeys.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition-all ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-accent/80 hover:text-foreground'
+                  }`
+                }
+              >
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-black/10 group-hover:bg-black/15">
+                  <link.icon className="h-4 w-4 shrink-0" />
+                </span>
+                <span>{t(link.key)}</span>
+              </NavLink>
+            ))}
+          </nav>
+          <div className="mt-auto p-2">
+            <Button className="w-full" variant="outline" onClick={onClose}>
+              {t('common.close')}
+            </Button>
+          </div>
         </div>
       </aside>
     </>

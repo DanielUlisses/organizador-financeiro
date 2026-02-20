@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { BadgeDollarSign, CreditCard, PiggyBank } from 'lucide-react'
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
   Cell,
   Pie,
   PieChart,
@@ -17,9 +15,11 @@ import {
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
 import { KpiCard } from '@/components/common/KpiCard'
+import { LazyMount } from '@/components/common/LazyMount'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
-import { SectionHeader } from '@/components/common/SectionHeader'
 import { CHART_THEME, getCategoryColor } from '@/lib/chart-colors'
+import { getCategoryIconFromMetadata } from '@/lib/category-icons'
+import { getDefaultCurrency } from '@/pages/Settings/settings-sections'
 import {
   calculateInvestedPercentage,
   calculateSpentPercentage,
@@ -44,12 +44,14 @@ type BankAccount = {
   id: number
   name: string
   balance: number
+  currency?: string
 }
 
 type CreditCard = {
   id: number
   name: string
   current_balance: number
+  currency?: string
 }
 
 type InvestmentTotalResponse = {
@@ -61,19 +63,61 @@ type MetadataCategory = {
   transaction_type: string
   name: string
   color: string
+  icon?: string
   budget?: number | null
 }
 
 type WidgetLoadState = 'idle' | 'loading' | 'success' | 'error'
+type CurrencyMetrics = Record<string, { income: number; expenses: number }>
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const DASHBOARD_SELECTED_ACCOUNTS_STORAGE_KEY = 'of_dashboard_selected_account_ids'
+const CURRENCY_FLAGS: Record<string, string> = {
+  USD: '/flags/us.png',
+  BRL: '/flags/br.svg',
+  EUR: '/flags/eu.svg',
+  GBP: '/flags/eu.svg',
+}
+
+function getCurrencyFlag(currency: string): string {
+  return CURRENCY_FLAGS[currency] ?? '/flags/eu.svg'
+}
+
+function makeCurrencyFormatter(locale: string, currency: string): Intl.NumberFormat {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency })
+}
+
+function getCurrencySymbol(locale: string, currency: string): string {
+  const parts = makeCurrencyFormatter(locale, currency).formatToParts(0)
+  return parts.find((part) => part.type === 'currency')?.value ?? currency
+}
+
+function readStoredAccountSelection(): { ids: number[]; hasStored: boolean } {
+  if (typeof window === 'undefined') return { ids: [], hasStored: false }
+  const saved = window.localStorage.getItem(DASHBOARD_SELECTED_ACCOUNTS_STORAGE_KEY)
+  if (!saved) return { ids: [], hasStored: false }
+  try {
+    const parsed = JSON.parse(saved)
+    if (!Array.isArray(parsed)) {
+      window.localStorage.removeItem(DASHBOARD_SELECTED_ACCOUNTS_STORAGE_KEY)
+      return { ids: [], hasStored: false }
+    }
+    const ids = parsed
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0)
+    return { ids, hasStored: true }
+  } catch {
+    window.localStorage.removeItem(DASHBOARD_SELECTED_ACCOUNTS_STORAGE_KEY)
+    return { ids: [], hasStored: false }
+  }
+}
 
 export function DashboardPage() {
   const { currentMonth } = useMonthContext()
   const { t, i18n } = useTranslation()
   const locale = i18n.language === 'pt-BR' ? 'pt-BR' : 'en-US'
-  const currencyCode = i18n.language === 'pt-BR' ? 'BRL' : 'USD'
-  const currencyFormatter = new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode })
+  const currencyCode = getDefaultCurrency().toUpperCase()
+  const currencyFormatter = makeCurrencyFormatter(locale, currencyCode)
   const percentFormatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
   const userId = 1
   const [loading, setLoading] = useState(false)
@@ -86,10 +130,11 @@ export function DashboardPage() {
   const [creditCards, setCreditCards] = useState<CreditCard[]>([])
   const [totalInvested, setTotalInvested] = useState(0)
   const [categories, setCategories] = useState<MetadataCategory[]>([])
+  const [currencyMetrics, setCurrencyMetrics] = useState<CurrencyMetrics>({})
+  const [selectedAccountIds, setSelectedAccountIds] = useState<number[]>(() => readStoredAccountSelection().ids)
+  const [hasStoredAccountSelection] = useState<boolean>(() => readStoredAccountSelection().hasStored)
 
   const [reportsState, setReportsState] = useState<WidgetLoadState>('idle')
-  const [accountsState, setAccountsState] = useState<WidgetLoadState>('idle')
-  const [creditCardsState, setCreditCardsState] = useState<WidgetLoadState>('idle')
   const [investmentsState, setInvestmentsState] = useState<WidgetLoadState>('idle')
 
   const [reportsError, setReportsError] = useState<string | null>(null)
@@ -114,8 +159,6 @@ export function DashboardPage() {
     setLoading(true)
     setFatalError(null)
     setReportsState('loading')
-    setAccountsState('loading')
-    setCreditCardsState('loading')
     setInvestmentsState('loading')
     setReportsError(null)
     setAccountsError(null)
@@ -124,7 +167,7 @@ export function DashboardPage() {
 
     try {
       const base = `${API_BASE_URL}/reports`
-      const [expenseRes, incomeMonthRes, incomeDayRes, categoriesRes, accountsRes, creditCardsRes, investmentsRes] = await Promise.allSettled([
+      const [expenseRes, incomeMonthRes, incomeDayRes, categoriesRes, accountsRes, creditCardsRes, investmentsRes, currencyMetricsRes] = await Promise.allSettled([
         fetch(
           `${base}/expense-breakdown?user_id=${userId}&start_date=${dateRange.start}&end_date=${dateRange.end}&breakdown_by=category`,
         ),
@@ -138,6 +181,7 @@ export function DashboardPage() {
         fetch(`${API_BASE_URL}/bank-accounts?user_id=${userId}`),
         fetch(`${API_BASE_URL}/credit-cards?user_id=${userId}`),
         fetch(`${API_BASE_URL}/investment-accounts/${userId}/total-value`),
+        fetch(`${base}/currency-metrics?user_id=${userId}&start_date=${dateRange.start}&end_date=${dateRange.end}`),
       ])
 
       if (
@@ -199,22 +243,32 @@ export function DashboardPage() {
       }
 
       if (accountsRes.status === 'fulfilled' && accountsRes.value.ok) {
-        const rawAccounts = (await accountsRes.value.json()) as Array<{ id: number; name: string; balance: unknown }>
-        setAccounts(rawAccounts.map((account) => ({ id: account.id, name: account.name, balance: toNumber(account.balance) })))
-        setAccountsState('success')
+        const rawAccounts = (await accountsRes.value.json()) as Array<{ id: number; name: string; balance: unknown; currency?: string }>
+        setAccounts(
+          rawAccounts.map((account) => ({
+            id: account.id,
+            name: account.name,
+            balance: toNumber(account.balance),
+            currency: (account.currency ?? currencyCode).toUpperCase(),
+          })),
+        )
       } else {
         setAccounts([])
-        setAccountsState('error')
         setAccountsError(t('dashboard.accountsError'))
       }
 
       if (creditCardsRes.status === 'fulfilled' && creditCardsRes.value.ok) {
-        const rawCards = (await creditCardsRes.value.json()) as Array<{ id: number; name: string; current_balance: unknown }>
-        setCreditCards(rawCards.map((card) => ({ id: card.id, name: card.name, current_balance: toNumber(card.current_balance) })))
-        setCreditCardsState('success')
+        const rawCards = (await creditCardsRes.value.json()) as Array<{ id: number; name: string; current_balance: unknown; currency?: string }>
+        setCreditCards(
+          rawCards.map((card) => ({
+            id: card.id,
+            name: card.name,
+            current_balance: toNumber(card.current_balance),
+            currency: (card.currency ?? currencyCode).toUpperCase(),
+          })),
+        )
       } else {
         setCreditCards([])
-        setCreditCardsState('error')
         setCreditCardsError(t('dashboard.creditCardsError'))
       }
 
@@ -227,16 +281,31 @@ export function DashboardPage() {
         setInvestmentsState('error')
         setInvestmentsError(t('dashboard.investmentsError'))
       }
+
+      if (currencyMetricsRes.status === 'fulfilled' && currencyMetricsRes.value.ok) {
+        const rawMetrics = (await currencyMetricsRes.value.json()) as {
+          metrics?: Array<{ currency: string; income: unknown; expenses: unknown }>
+        }
+        const metrics: CurrencyMetrics = {}
+        for (const item of rawMetrics.metrics ?? []) {
+          const currency = (item.currency ?? currencyCode).toUpperCase()
+          metrics[currency] = {
+            income: toNumber(item.income),
+            expenses: toNumber(item.expenses),
+          }
+        }
+        setCurrencyMetrics(metrics)
+      } else {
+        setCurrencyMetrics({})
+      }
     } catch (err) {
       setFatalError(err instanceof Error ? err.message : 'Unknown error')
       setReportsState('error')
-      setAccountsState('error')
-      setCreditCardsState('error')
       setInvestmentsState('error')
     } finally {
       setLoading(false)
     }
-  }, [dateRange.end, dateRange.start, rolling12Range.end, rolling12Range.start, t])
+  }, [currencyCode, dateRange.end, dateRange.start, rolling12Range.end, rolling12Range.start, t])
 
   useEffect(() => {
     void loadReports()
@@ -250,9 +319,46 @@ export function DashboardPage() {
     return () => window.removeEventListener('of:transactions-changed', handler)
   }, [loadReports])
 
+  useEffect(() => {
+    if (accounts.length === 0) return
+    setSelectedAccountIds((current) => {
+      const valid = current.filter((id) => accounts.some((account) => account.id === id))
+      if (valid.length > 0) return valid
+      if (hasStoredAccountSelection) return valid
+      return accounts.map((account) => account.id)
+    })
+  }, [accounts, hasStoredAccountSelection])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (accounts.length === 0) return
+    window.localStorage.setItem(DASHBOARD_SELECTED_ACCOUNTS_STORAGE_KEY, JSON.stringify(selectedAccountIds))
+  }, [accounts.length, selectedAccountIds])
+
   const totalIncome = incomeVsExpensesDaily?.total_income ?? 0
   const totalExpenses = incomeVsExpensesDaily?.total_expenses ?? 0
   const currentBalance = accounts.reduce((sum, account) => sum + account.balance, 0)
+  const balancesByCurrency = accounts.reduce<Record<string, number>>((acc, account) => {
+    const currency = (account.currency ?? currencyCode).toUpperCase()
+    acc[currency] = (acc[currency] ?? 0) + account.balance
+    return acc
+  }, {})
+  const defaultCurrencyBalance = balancesByCurrency[currencyCode] ?? 0
+  const secondaryCurrencies = Object.entries(balancesByCurrency).filter(([currency]) => currency !== currencyCode)
+  const secondaryCurrencyEntry =
+    secondaryCurrencies.length > 0
+      ? secondaryCurrencies.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]
+      : null
+  const secondaryCurrencyCode = secondaryCurrencyEntry?.[0] ?? null
+  const secondaryCurrencyBalance = secondaryCurrencyEntry?.[1] ?? 0
+  const additionalSecondaryCount = Math.max(0, secondaryCurrencies.length - 1)
+  const defaultCurrencyFormatter = makeCurrencyFormatter(locale, currencyCode)
+  const secondaryCurrencyFormatter = secondaryCurrencyCode ? makeCurrencyFormatter(locale, secondaryCurrencyCode) : null
+  const defaultIncome = currencyMetrics[currencyCode]?.income ?? 0
+  const defaultExpenses = currencyMetrics[currencyCode]?.expenses ?? 0
+  const secondaryIncome = secondaryCurrencyCode ? (currencyMetrics[secondaryCurrencyCode]?.income ?? 0) : 0
+  const secondaryExpenses = secondaryCurrencyCode ? (currencyMetrics[secondaryCurrencyCode]?.expenses ?? 0) : 0
+  const balanceCardsGridClass = secondaryCurrencyCode ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'grid grid-cols-1 gap-4'
   const spentPercentage = calculateSpentPercentage(totalIncome, totalExpenses)
   const investedPercentage = calculateInvestedPercentage(totalIncome, totalInvested)
   const expenseCategoryItems = useMemo(
@@ -279,8 +385,6 @@ export function DashboardPage() {
       rollingBalance += point.net
       return { label: point.period.slice(5, 10), balance: rollingBalance }
     })
-  const income12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({ label: point.period, value: point.income }))
-  const expenses12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({ label: point.period, value: point.expenses }))
   const spentPct12 = (incomeVsExpensesMonthly?.series ?? []).map((point) => ({
     label: point.period,
     value: calculateSpentPercentage(point.income, point.expenses),
@@ -299,16 +403,16 @@ export function DashboardPage() {
   const consumedBudgetTotal = budgets.reduce((sum, item) => sum + item.consumed, 0)
   const expenseCategoryTotal = expenseCategoryItems.reduce((sum, item) => sum + item.total, 0)
   const widgetErrors = [reportsError, accountsError, creditCardsError, investmentsError].filter(Boolean)
+  const selectedValueAccounts = accounts.filter((account) => selectedAccountIds.includes(account.id))
+
+  const toggleAccountSelection = (accountId: number) => {
+    setSelectedAccountIds((current) =>
+      current.includes(accountId) ? current.filter((id) => id !== accountId) : [...current, accountId],
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border bg-card p-5 shadow-sm">
-        <SectionHeader
-          title={t('dashboard.title')}
-          subtitle={t('dashboard.subtitle')}
-          actions={<MonthNavigator />}
-        />
-      </div>
+    <div className="mx-auto w-full max-w-[1180px] space-y-6">
 
       {loading && <p className="mb-2 text-sm text-muted-foreground">{t('dashboard.loadingData')}</p>}
       {fatalError && <p className="mb-4 text-sm text-red-500">{fatalError}</p>}
@@ -318,122 +422,175 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard
-          label={t('dashboard.currentBalance')}
-          value={reportsState === 'success' ? currencyFormatter.format(currentBalance) : '--'}
-          hint={t('common.monthNet', { start: dateRange.start, end: dateRange.end })}
-          className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white border-0"
-          labelClassName="text-indigo-100"
-          hintClassName="text-indigo-100/90"
-          backgroundChart={
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={balanceTrend}>
-                <Area
-                  type="monotone"
-                  dataKey="balance"
-                  stroke={CHART_THEME.layout.mutedLine}
-                  fill={CHART_THEME.layout.mutedLine}
-                  strokeWidth={2}
+      <div className="space-y-3">
+        <div className={balanceCardsGridClass}>
+          <div className="sm:col-span-1">
+            <KpiCard
+              label={`${t('dashboard.currentBalance')} (${currencyCode} ${getCurrencySymbol(locale, currencyCode)})`}
+              icon={BadgeDollarSign}
+              value={reportsState === 'success' ? defaultCurrencyFormatter.format(defaultCurrencyBalance) : '--'}
+              valueAccessory={
+                <img
+                  src={getCurrencyFlag(currencyCode)}
+                  alt={`${currencyCode} flag`}
+                  className="h-11 w-11 rounded-full object-cover shadow-md ring-2 ring-white/80"
                 />
-              </AreaChart>
-            </ResponsiveContainer>
-          }
-        />
-        <KpiCard
-          label={t('dashboard.monthlyIncome')}
-          value={reportsState === 'success' ? currencyFormatter.format(totalIncome) : '--'}
-          accentClassName="text-white"
-          className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white border-0"
-          labelClassName="text-cyan-100"
-          hintClassName="text-cyan-100/90"
-          backgroundChart={
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={income12}>
-                <Area type="monotone" dataKey="value" stroke="#dbeafe" fill="#dbeafe" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          }
-        />
-        <KpiCard
-          label={t('dashboard.monthlyExpenses')}
-          value={reportsState === 'success' ? currencyFormatter.format(totalExpenses) : '--'}
-          accentClassName="text-red-500"
-          backgroundChart={
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={expenses12}>
-                <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.expenses} fill={CHART_THEME.series.expenses} strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          }
-        />
-        <KpiCard
-          label={t('dashboard.investedPctIncome')}
-          value={reportsState === 'success' && investmentsState === 'success' ? `${percentFormatter.format(investedPercentage)}%` : '--'}
-          hint={investmentsState === 'success' ? currencyFormatter.format(totalInvested) : t('common.noInvestmentData')}
-          backgroundChart={
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={investedPct12}>
-                <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.income} fill={CHART_THEME.series.income} strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          }
-        />
-        <KpiCard
-          label={t('dashboard.spentPctIncome')}
-          value={reportsState === 'success' ? `${percentFormatter.format(spentPercentage)}%` : '--'}
-          backgroundChart={
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={spentPct12}>
-                <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.outflow} fill={CHART_THEME.series.outflow} strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          }
-        />
+              }
+              details={
+                reportsState === 'success'
+                  ? [
+                      { label: t('dashboard.monthlyIncome'), value: defaultCurrencyFormatter.format(defaultIncome) },
+                      { label: t('dashboard.monthlyExpenses'), value: defaultCurrencyFormatter.format(defaultExpenses) },
+                    ]
+                  : undefined
+              }
+              hint={t('common.monthNet', { start: dateRange.start, end: dateRange.end })}
+              className="border-0 bg-gradient-to-br from-[#1b2559] via-[#3f5efb] to-[#5f76ff] text-white shadow-lg"
+              labelClassName="text-white/95"
+              hintClassName="text-white/90"
+              backgroundChart={
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={balanceTrend}>
+                    <Area
+                      type="monotone"
+                      dataKey="balance"
+                      stroke={CHART_THEME.layout.mutedLine}
+                      fill={CHART_THEME.layout.mutedLine}
+                      strokeWidth={3}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              }
+            />
+          </div>
+          {secondaryCurrencyCode && secondaryCurrencyFormatter ? (
+            <div className="sm:col-span-1">
+              <KpiCard
+                label={`${t('dashboard.currentBalance')} (${secondaryCurrencyCode} ${getCurrencySymbol(locale, secondaryCurrencyCode)})`}
+                icon={BadgeDollarSign}
+                value={reportsState === 'success' ? secondaryCurrencyFormatter.format(secondaryCurrencyBalance) : '--'}
+                valueAccessory={
+                  <img
+                    src={getCurrencyFlag(secondaryCurrencyCode)}
+                    alt={`${secondaryCurrencyCode} flag`}
+                    className="h-11 w-11 rounded-full object-cover shadow-md ring-2 ring-white/80"
+                  />
+                }
+                details={
+                  reportsState === 'success'
+                    ? [
+                        { label: t('dashboard.monthlyIncome'), value: secondaryCurrencyFormatter.format(secondaryIncome) },
+                        { label: t('dashboard.monthlyExpenses'), value: secondaryCurrencyFormatter.format(secondaryExpenses) },
+                      ]
+                    : undefined
+                }
+                hint={
+                  additionalSecondaryCount > 0
+                    ? `${t('common.monthNet', { start: dateRange.start, end: dateRange.end })} · +${additionalSecondaryCount} other currencies`
+                    : t('common.monthNet', { start: dateRange.start, end: dateRange.end })
+                }
+                className="border-0 bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#334155] text-white shadow-lg"
+                labelClassName="text-white/95"
+                hintClassName="text-white/90"
+                backgroundChart={
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={balanceTrend}>
+                      <Area
+                        type="monotone"
+                        dataKey="balance"
+                        stroke={CHART_THEME.layout.mutedLine}
+                        fill={CHART_THEME.layout.mutedLine}
+                        strokeWidth={3}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                }
+              />
+            </div>
+          ) : null}
+        </div>
+        <div className="flex w-full justify-start bg-transparent md:justify-end">
+          <MonthNavigator />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title={t('dashboard.balancePerAccount')} subtitle={t('dashboard.activeBankBalances')}>
-          {accountsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingAccountBalances')}</p> : null}
-          {accountsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.accountBalancesUnavailable')}</p> : null}
-          {accountsState === 'success' && accounts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('dashboard.noActiveAccounts')}</p>
-          ) : null}
-          {accountsState === 'success' && accounts.length > 0 ? (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={accounts} margin={{ left: 8, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" hide={accounts.length > 4} />
-                  <YAxis />
-                  <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="balance" fill={CHART_THEME.series.balance} radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <ChartCard title={t('dashboard.balanceValues')} subtitle={t('dashboard.accountsAndCardsBalances')}>
+            <div className="space-y-4">
+              <details className="rounded-xl border bg-card p-2">
+                <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+                  {t('dashboard.selectAccounts')}
+                </summary>
+                <div className="mt-2 max-h-40 space-y-1 overflow-auto">
+                  {accounts.map((account) => (
+                    <label key={account.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedAccountIds.includes(account.id)}
+                        onChange={() => toggleAccountSelection(account.id)}
+                      />
+                      <span>{account.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+              <div className="space-y-1 rounded-xl border bg-card p-2">
+                {selectedValueAccounts.map((account) => (
+                  <div key={account.id} className="flex items-center justify-between text-sm">
+                    <span>{account.name}</span>
+                    <span className="font-semibold">
+                      {makeCurrencyFormatter(locale, (account.currency ?? currencyCode).toUpperCase()).format(account.balance)}
+                    </span>
+                  </div>
+                ))}
+                {selectedValueAccounts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('dashboard.noActiveAccounts')}</p>
+                ) : null}
+              </div>
+              <div className="space-y-1 rounded-xl border bg-card p-2">
+                {creditCards.map((card) => (
+                  <div key={card.id} className="flex items-center justify-between text-sm">
+                    <span>{card.name}</span>
+                    <span className="font-semibold">
+                      {makeCurrencyFormatter(locale, (card.currency ?? currencyCode).toUpperCase()).format(card.current_balance)}
+                    </span>
+                  </div>
+                ))}
+                {creditCards.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('dashboard.noActiveCreditCards')}</p>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-        </ChartCard>
-
-        <ChartCard title={t('dashboard.balancePerCreditCard')} subtitle={t('dashboard.currentCardBalance')}>
-          {creditCardsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingCreditCards')}</p> : null}
-          {creditCardsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.creditCardBalancesUnavailable')}</p> : null}
-          {creditCardsState === 'success' && creditCards.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('dashboard.noActiveCreditCards')}</p>
-          ) : null}
-          {creditCardsState === 'success' && creditCards.length > 0 ? (
-            <div className="h-72">
+          </ChartCard>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <KpiCard
+            label={t('dashboard.investedPctIncome')}
+            icon={PiggyBank}
+            value={reportsState === 'success' && investmentsState === 'success' ? `${percentFormatter.format(investedPercentage)}%` : '--'}
+            hint={investmentsState === 'success' ? currencyFormatter.format(totalInvested) : t('common.noInvestmentData')}
+            backgroundChart={
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={creditCards} margin={{ left: 8, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" hide={creditCards.length > 4} />
-                  <YAxis />
-                  <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Bar dataKey="current_balance" fill={CHART_THEME.series.expenses} radius={[6, 6, 0, 0]} />
-                </BarChart>
+                <AreaChart data={investedPct12}>
+                  <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.income} fill={CHART_THEME.series.income} strokeWidth={3} />
+                </AreaChart>
               </ResponsiveContainer>
-            </div>
-          ) : null}
-        </ChartCard>
+            }
+          />
+          <KpiCard
+            label={t('dashboard.spentPctIncome')}
+            icon={CreditCard}
+            value={reportsState === 'success' ? `${percentFormatter.format(spentPercentage)}%` : '--'}
+            backgroundChart={
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={spentPct12}>
+                  <Area type="monotone" dataKey="value" stroke={CHART_THEME.series.outflow} fill={CHART_THEME.series.outflow} strokeWidth={3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            }
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -447,17 +604,28 @@ export function DashboardPage() {
             <div className="space-y-4">
               {budgets.map((budget) => {
                 const pct = budget.configured > 0 ? Math.min(100, (budget.consumed / budget.configured) * 100) : 0
+                const categoryMeta = categoryByName.get(budget.category.toLowerCase())
+                const CategoryIcon = getCategoryIconFromMetadata(categoryMeta?.icon, budget.category)
                 return (
                   <div key={budget.category} className="space-y-1">
                     <div className="flex items-center justify-between text-sm">
-                      <span>{budget.category}</span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-muted">
+                          <CategoryIcon className="h-3.5 w-3.5" />
+                        </span>
+                        {budget.category}
+                      </span>
                       <span className="text-muted-foreground">
-                        {currencyFormatter.format(budget.consumed)} / {currencyFormatter.format(budget.configured)}
+                        {currencyFormatter.format(budget.consumed)} / {currencyFormatter.format(budget.configured)} ({percentFormatter.format(pct)}%)
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-muted">
                       <div
-                        className={`h-2 rounded-full ${pct >= 100 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                        className={`h-2 rounded-full ${
+                          pct >= 100
+                            ? 'bg-gradient-to-r from-rose-500 to-red-600'
+                            : 'bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-500'
+                        }`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -478,7 +646,7 @@ export function DashboardPage() {
             <p className="text-sm text-muted-foreground">{t('dashboard.noExpenseCategories')}</p>
           ) : null}
           {reportsState === 'success' && expenseCategoryItems.length > 0 ? (
-            <div className="h-72">
+            <LazyMount>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -495,7 +663,7 @@ export function DashboardPage() {
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
+            </LazyMount>
           ) : null}
         </ChartCard>
       </div>
@@ -508,18 +676,27 @@ export function DashboardPage() {
             <p className="text-sm text-muted-foreground">{t('dashboard.noMonthlySeries')}</p>
           ) : null}
           {reportsState === 'success' && (incomeVsExpensesMonthly?.series.length ?? 0) > 0 ? (
-            <div className="h-72">
+            <LazyMount>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={incomeVsExpensesMonthly?.series ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <defs>
+                    <linearGradient id="income-gradient-12m" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#4F46E5" stopOpacity={0.05} />
+                    </linearGradient>
+                    <linearGradient id="expense-gradient-12m" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#06B6D4" stopOpacity={0.04} />
+                    </linearGradient>
+                  </defs>
                   <XAxis dataKey="period" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Area type="monotone" dataKey="income" stroke={CHART_THEME.series.income} fill={CHART_THEME.series.income} fillOpacity={0.2} />
-                  <Area type="monotone" dataKey="expenses" stroke={CHART_THEME.series.expenses} fill={CHART_THEME.series.expenses} fillOpacity={0.25} />
+                  <Area type="monotone" dataKey="income" stroke={CHART_THEME.series.income} strokeWidth={3} fill="url(#income-gradient-12m)" fillOpacity={1} />
+                  <Area type="monotone" dataKey="expenses" stroke={CHART_THEME.series.expenses} strokeWidth={3} fill="url(#expense-gradient-12m)" fillOpacity={1} />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
+            </LazyMount>
           ) : null}
         </ChartCard>
 
@@ -527,7 +704,7 @@ export function DashboardPage() {
           {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingBalanceTrend')}</p> : null}
           {reportsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.balanceTrendUnavailable')}</p> : null}
           {reportsState === 'success' ? (
-            <div className="h-72">
+            <LazyMount>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={balanceTrend}>
                   <defs>
@@ -536,14 +713,13 @@ export function DashboardPage() {
                     <stop offset="95%" stopColor={CHART_THEME.series.balance} stopOpacity={0.05} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currencyFormatter.format(toNumber(value))} />
-                  <Area type="monotone" dataKey="balance" stroke={CHART_THEME.series.balance} fill="url(#balance-gradient)" />
+                  <Area type="monotone" dataKey="balance" stroke={CHART_THEME.series.balance} strokeWidth={3} fill="url(#balance-gradient)" />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
+            </LazyMount>
           ) : null}
         </ChartCard>
       </div>

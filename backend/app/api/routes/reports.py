@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.schemas.report import ExpenseBreakdownResponse, IncomeVsExpensesResponse
+from app.schemas.report import CurrencyMetricsResponse, ExpenseBreakdownResponse, IncomeVsExpensesResponse
 from app.services.reports_service import ReportsService
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -44,4 +44,20 @@ def get_income_vs_expenses(
         start_date=start_date,
         end_date=end_date,
         granularity=granularity,
+    )
+
+
+@router.get("/currency-metrics", response_model=CurrencyMetricsResponse)
+def get_currency_metrics(
+    user_id: int,
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+):
+    """Get income/expense totals grouped by currency."""
+    return ReportsService.get_currency_metrics(
+        db=db,
+        user_id=user_id,
+        start_date=start_date,
+        end_date=end_date,
     )

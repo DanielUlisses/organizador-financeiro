@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowUpDown, Check, Pencil, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUpDown, Check, CircleDashed, Clock3, SignalHigh, Trash2, Wifi, X } from 'lucide-react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
-import { Area, AreaChart, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { Button } from '@/components/ui/button'
 import { CHART_THEME } from '@/lib/chart-colors'
+import { getCategoryIconFromMetadata } from '@/lib/category-icons'
 import { getTransactionTypeFromBackendCategory, type TransactionType } from '@/lib/transaction-taxonomy'
+import { getDefaultCurrency } from '@/pages/Settings/settings-sections'
 
 type CreditCard = {
   id: number
@@ -21,6 +24,7 @@ type CreditCard = {
   available_credit: number
   utilization_percentage: number
   default_payment_account_id?: number | null
+  currency?: string
 }
 
 function CardNetworkIcon({ network }: { network?: string | null }) {
@@ -75,6 +79,10 @@ type StatementSummary = {
   transactions: StatementTransaction[]
 }
 
+type StatementRow =
+  | { type: 'group'; key: string; date: string; closingBalance: number }
+  | { type: 'payment'; key: string; item: StatementTransaction }
+
 type EditForm = {
   description: string
   amount: string
@@ -87,10 +95,25 @@ type EditForm = {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const USER_ID = 1
-const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
 const toIsoDate = (value: Date) => value.toISOString().slice(0, 10)
 const normalizeDate = (value?: string | null) => (value ?? '').slice(0, 10)
+const getStatusIcon = (status?: string | null) => {
+  const value = (status ?? '').toLowerCase()
+  if (value === 'reconciled') return Check
+  if (value === 'processed') return Check
+  if (value === 'scheduled' || value === 'planned') return Clock3
+  if (value === 'cancelled') return X
+  return CircleDashed
+}
+const getStatusButtonClass = (status?: string | null) => {
+  const value = (status ?? '').toLowerCase()
+  if (value === 'reconciled') return 'border-emerald-500 bg-emerald-500 text-white'
+  if (value === 'processed') return 'border-emerald-300 bg-emerald-100 text-emerald-700'
+  if (value === 'scheduled' || value === 'planned') return 'border-amber-300 bg-amber-100 text-amber-700'
+  if (value === 'cancelled') return 'border-rose-300 bg-rose-100 text-rose-700'
+  return 'bg-card'
+}
 const shiftIsoDate = (value: string, deltaDays: number) => {
   const date = new Date(`${normalizeDate(value)}T00:00:00`)
   date.setDate(date.getDate() + deltaDays)
@@ -99,7 +122,8 @@ const shiftIsoDate = (value: string, deltaDays: number) => {
 
 export function CreditCardsPage() {
   const { currentMonth } = useMonthContext()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = i18n.language === 'pt-BR' ? 'pt-BR' : 'en-US'
   const referenceDate = useMemo(
     () => toIsoDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 15)),
     [currentMonth],
@@ -124,7 +148,7 @@ export function CreditCardsPage() {
   })
   const [editTagIds, setEditTagIds] = useState<number[]>([])
   const [recurringScope, setRecurringScope] = useState<'only_event' | 'from_event_forward' | 'all_events'>('only_event')
-  const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string }>>([])
+  const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string; icon?: string; color?: string }>>([])
   const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
   const [bankAccounts, setBankAccounts] = useState<Array<{ id: number; name: string }>>([])
   const [paymentAccountId, setPaymentAccountId] = useState<string>('')
@@ -138,6 +162,11 @@ export function CreditCardsPage() {
   const selectedCard = useMemo(
     () => cards.find((card) => card.id === selectedCardId) ?? null,
     [cards, selectedCardId],
+  )
+  const currencyCode = (selectedCard?.currency ?? getDefaultCurrency()).toUpperCase()
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode }),
+    [locale, currencyCode],
   )
 
   const loadCards = async () => {
@@ -154,6 +183,7 @@ export function CreditCardsPage() {
       available_credit: unknown
       utilization_percentage: unknown
       default_payment_account_id?: number | null
+      currency?: string
     }>
     const mapped: CreditCard[] = raw.map((card) => ({
       id: card.id,
@@ -166,6 +196,7 @@ export function CreditCardsPage() {
       available_credit: Number(card.available_credit),
       utilization_percentage: Number(card.utilization_percentage),
       default_payment_account_id: card.default_payment_account_id,
+      currency: (card.currency ?? 'USD').toUpperCase(),
     }))
     setCards(mapped)
     setSelectedCardId((current) => current ?? mapped[0]?.id ?? null)
@@ -210,19 +241,21 @@ export function CreditCardsPage() {
       id: number
       payment_type?: string
       category?: string
-      category_id?: number
+      category_id?: number | string
       notes?: string
       tag_ids?: number[]
       from_account_id?: number
     }>
     const paymentMap = new Map(paymentsRaw.map((payment) => [payment.id, payment]))
 
-    const categoriesRaw = (await categoriesRes.json()) as Array<{ id: number; transaction_type: string; name: string }>
+    const categoriesRaw = (await categoriesRes.json()) as Array<{ id: number; transaction_type: string; name: string; icon?: string; color?: string }>
     setCategories(
       categoriesRaw.map((item) => ({
         id: item.id,
         transaction_type: getTransactionTypeFromBackendCategory(item.transaction_type),
         name: item.name,
+        icon: item.icon ?? 'wallet',
+        color: item.color,
       })),
     )
     const tagsRaw = (await tagsRes.json()) as Array<{ id: number; name: string }>
@@ -241,7 +274,7 @@ export function CreditCardsPage() {
         direction: transaction.direction,
         payment_type: payment?.payment_type,
         category: payment?.category,
-        category_id: payment?.category_id,
+        category_id: payment?.category_id != null ? Number(payment.category_id) : undefined,
         notes: payment?.notes,
         tag_ids: payment?.tag_ids ?? [],
         from_account_id: payment?.from_account_id,
@@ -355,6 +388,37 @@ export function CreditCardsPage() {
     values.sort((a, b) => a.date.localeCompare(b.date))
     return sortOrder === 'older' ? values : values.reverse()
   }, [summary, sortOrder])
+  const statementRows = useMemo<StatementRow[]>(
+    () =>
+      groupedStatement.flatMap((group) => [
+        {
+          type: 'group',
+          key: `group-${group.date}`,
+          date: group.date,
+          closingBalance: group.closingBalance,
+        } as StatementRow,
+        ...group.items.map(
+          (item): StatementRow => ({
+            type: 'payment',
+            key: `payment-${item.payment_id}-${item.occurrence_id ?? 'base'}-${item.transaction_date}`,
+            item,
+          }),
+        ),
+      ]),
+    [groupedStatement],
+  )
+  const statementListRef = useRef<HTMLDivElement | null>(null)
+  const statementVirtualizer = useVirtualizer({
+    count: statementRows.length,
+    getScrollElement: () => statementListRef.current,
+    estimateSize: (index) => {
+      const row = statementRows[index]
+      if (!row) return 48
+      if (row.type === 'group') return 40
+      return 52
+    },
+    overscan: 12,
+  })
 
   const chartSeries = useMemo(() => {
     if (!summary) return []
@@ -613,7 +677,7 @@ export function CreditCardsPage() {
         body: JSON.stringify({
           description: paymentDescription,
           amount,
-          currency: 'USD',
+          currency: currencyCode,
           category: 'transfer',
           from_account_type: 'bank_account',
           from_account_id: Number(paymentAccountId),
@@ -641,7 +705,7 @@ export function CreditCardsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-card p-5 shadow-sm">
+      <div className="of-surface rounded-3xl p-5">
         <SectionHeader
           title={t('creditCards.title')}
           actions={
@@ -671,38 +735,55 @@ export function CreditCardsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-xl overflow-hidden border border-border bg-card shadow-sm">
+        <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
           <div
-            className="relative flex min-h-[180px] flex-col justify-between rounded-t-xl p-5 text-white"
+            className="relative flex min-h-[210px] flex-col justify-between rounded-t-3xl p-5 text-white"
             style={{
-              background: 'linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%)',
+              background: 'linear-gradient(145deg, #09090b 0%, #111827 55%, #1f2937 100%)',
               boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
             }}
           >
+            <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-violet-500/25 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-14 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
             <div className="flex items-start justify-between">
-              <span className="text-sm font-semibold tracking-wide text-white/95">{selectedCard?.name ?? 'Credit card'}</span>
-              <div className="text-white/90 flex h-8 w-12 items-center justify-end overflow-hidden">
-                <CardNetworkIcon network={selectedCard?.card_network ?? selectedCard?.issuer} />
+              <div className="space-y-1">
+                <span className="text-[11px] uppercase tracking-[0.26em] text-white/70">Premium card</span>
+                <p className="text-base font-semibold tracking-wide text-white/95">{selectedCard?.name ?? 'Credit card'}</p>
               </div>
+              <div className="flex items-center gap-2 text-white/80">
+                <SignalHigh className="h-4 w-4" />
+                <Wifi className="h-4 w-4 rotate-90" />
+              </div>
+            </div>
+            <div className="relative z-10 mt-2">
+              <div className="mb-4 inline-flex h-10 w-14 items-center justify-center rounded-lg border border-white/20 bg-white/10">
+                <div className="h-6 w-9 rounded-md bg-gradient-to-br from-yellow-100/90 via-yellow-300/90 to-yellow-500/90" />
+              </div>
+              <p className="font-mono text-lg tracking-[0.26em] text-white/95">**** **** **** {selectedCard?.card_number_last4 ?? '****'}</p>
             </div>
             <div className="flex items-end justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-wider text-white/70">{t('common.cardholder')}</p>
-                <p className="font-mono text-sm tracking-widest">**** **** **** {selectedCard?.card_number_last4 ?? '****'}</p>
+                <p className="text-[11px] uppercase tracking-wider text-white/65">{t('common.available')}</p>
+                <p className="text-sm font-semibold text-white/90">{currencyFormatter.format(selectedCard?.available_credit ?? 0)}</p>
                 <p className="text-xs text-white/60">
-                  {t('common.exp')} {summary?.close_date?.slice(5, 7) ?? '**'}/{summary?.due_date?.slice(2, 4) ?? '**'} · {t('common.available')} {currency.format(selectedCard?.available_credit ?? 0)}
+                  {t('common.exp')} {summary?.close_date?.slice(5, 7) ?? '**'}/{summary?.due_date?.slice(2, 4) ?? '**'}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-white/70">{t('common.statementBalance')}</p>
-                <p className="text-2xl font-bold tracking-tight">{currency.format(summary?.statement_balance ?? selectedCard?.current_balance ?? 0)}</p>
+                <div className="text-white/90 flex h-8 w-12 items-center justify-end overflow-hidden">
+                  <CardNetworkIcon network={selectedCard?.card_network ?? selectedCard?.issuer} />
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/70">{t('common.statementBalance')}</p>
+                <p className="text-2xl font-bold tracking-tight">{currencyFormatter.format(summary?.statement_balance ?? selectedCard?.current_balance ?? 0)}</p>
               </div>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-3 border-t bg-card px-5 py-4 sm:grid-cols-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('common.lastInvoiceValue')}</p>
-              <p className="mt-1 text-2xl font-semibold">{currency.format(lastInvoiceValue)}</p>
+              <p className="mt-1 text-2xl font-semibold">{currencyFormatter.format(lastInvoiceValue)}</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('common.paymentStatus')}</p>
@@ -727,13 +808,12 @@ export function CreditCardsPage() {
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={invoiceChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => currency.format(v)} />
-                  <Tooltip formatter={(value: number) => currency.format(value)} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => currencyFormatter.format(v)} />
+                  <Tooltip formatter={(value: number) => currencyFormatter.format(value)} />
                   <Legend />
                   <Bar dataKey="charges" fill={CHART_THEME.series.balance} name={t('common.charges')} radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="average" stroke={CHART_THEME.series.expenses} strokeWidth={2} strokeDasharray="4 4" name={t('common.average')} dot={false} />
+                  <Line type="monotone" dataKey="average" stroke={CHART_THEME.series.expenses} strokeWidth={3} strokeDasharray="4 4" name={t('common.average')} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -763,10 +843,9 @@ export function CreditCardsPage() {
                       <stop offset="95%" stopColor={CHART_THEME.series.expenses} stopOpacity={0.05} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={(value: number | string) => currency.format(Number(value))} />
+                  <Tooltip formatter={(value: number | string) => currencyFormatter.format(Number(value))} />
                   <Area type="monotone" dataKey="runningBalance" stroke={CHART_THEME.series.balance} fill="url(#cc-balance-gradient)" name={t('common.runningBalance')} />
                   <Area type="monotone" dataKey="dailyCharges" stroke={CHART_THEME.series.expenses} fill="url(#cc-charges-gradient)" name={t('common.dailyCharges')} />
                 </AreaChart>
@@ -777,7 +856,7 @@ export function CreditCardsPage() {
 
         <ChartCard
           title={t('creditCards.chargesVsPayments')}
-          subtitle={t('creditCards.chargesPaymentsSubtitle', { charges: currency.format(summary?.charges_total ?? 0), payments: currency.format(summary?.payments_total ?? 0) })}
+          subtitle={t('creditCards.chargesPaymentsSubtitle', { charges: currencyFormatter.format(summary?.charges_total ?? 0), payments: currencyFormatter.format(summary?.payments_total ?? 0) })}
         >
           {chartSeries.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('common.noFlowPointsInCycle')}</p>
@@ -795,12 +874,11 @@ export function CreditCardsPage() {
                       <stop offset="95%" stopColor={CHART_THEME.series.inflow} stopOpacity={0.04} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={(value: number | string) => currency.format(Number(value))} />
-                  <Area type="monotone" dataKey="charges" stroke={CHART_THEME.series.outflow} fill="url(#cc-charges-flow-gradient)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="payments" stroke={CHART_THEME.series.inflow} fill="url(#cc-payments-flow-gradient)" strokeWidth={2} />
+                  <Tooltip formatter={(value: number | string) => currencyFormatter.format(Number(value))} />
+                  <Area type="monotone" dataKey="charges" stroke={CHART_THEME.series.outflow} fill="url(#cc-charges-flow-gradient)" strokeWidth={3} />
+                  <Area type="monotone" dataKey="payments" stroke={CHART_THEME.series.inflow} fill="url(#cc-payments-flow-gradient)" strokeWidth={3} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -881,50 +959,69 @@ export function CreditCardsPage() {
         {groupedStatement.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('common.noTransactionsForCycle')}</p>
         ) : (
-          <div className="space-y-2">
-            {groupedStatement.map((group, index) => (
-              <div key={group.date} className={index % 2 === 1 ? 'rounded-md bg-secondary/20 px-2 py-1' : 'px-2 py-1'}>
-                <div className="mb-1 flex items-center justify-between border-b pb-1 text-sm font-semibold">
-                  <span>{group.date}</span>
-                  <span>{currency.format(group.closingBalance)}</span>
-                </div>
-                <div className="space-y-1">
-                  {group.items.map((item) => {
-                    const isReconciled = item.status === 'reconciled'
-                    return (
-                      <div key={`${item.payment_id}-${item.occurrence_id ?? 'base'}-${item.transaction_date}`} className="grid grid-cols-12 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-background/60">
-                        <div className="col-span-4 truncate">{item.description}</div>
-                        <div className="col-span-2 text-muted-foreground">{categories.find((cat) => cat.id === item.category_id)?.name ?? '-'}</div>
-                        <div className="col-span-2 text-muted-foreground">{(item.status ?? '') ? t(`status.${(item.status ?? '').toLowerCase()}`, (item.status ?? '')) : '-'}</div>
-                        <div className={`col-span-2 text-right ${item.signed_amount < 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {currency.format(Math.abs(item.amount))}
-                        </div>
-                        <div className="col-span-2 flex justify-end gap-1">
-                          <button
-                            type="button"
-                            aria-label={isReconciled ? t('common.moveToPending') : t('common.confirmTransaction')}
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${
-                              isReconciled ? 'border-emerald-500 bg-emerald-500 text-white' : 'bg-card'
-                            }`}
-                            onClick={() => void toggleConfirm(item)}
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={t('common.editTransaction')}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-card"
-                            onClick={() => openEditModal(item)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
+          <div ref={statementListRef} className="max-h-[640px] overflow-auto">
+            <div className="relative w-full" style={{ height: `${statementVirtualizer.getTotalSize()}px` }}>
+              {statementVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = statementRows[virtualRow.index]
+                if (!row) return null
+                return (
+                  <div
+                    key={row.key}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    {row.type === 'group' ? (
+                      <div className="px-2 py-1">
+                        <div className="mb-1 flex items-center justify-between border-b pb-1 text-sm font-semibold">
+                          <span>{row.date}</span>
+                          <span>{currencyFormatter.format(row.closingBalance)}</span>
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
+                    ) : null}
+                    {row.type === 'payment' ? (
+                      (() => {
+                        const item = row.item
+                        const isReconciled = item.status === 'reconciled'
+                        const StatusIcon = getStatusIcon(item.status)
+                        const category = categories.find((cat) => cat.id === item.category_id)
+                        const CategoryIcon = getCategoryIconFromMetadata(category?.icon, category?.name)
+                        return (
+                          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-xl px-3 py-2 text-sm hover:bg-background/60">
+                            <span
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border"
+                              style={{ backgroundColor: category?.color ? `${category.color}22` : undefined }}
+                              aria-hidden
+                            >
+                              <CategoryIcon className="h-4 w-4" style={{ color: category?.color ?? 'currentColor' }} />
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(item)}
+                              className="truncate text-left font-medium underline-offset-2 hover:underline"
+                            >
+                              {item.description}
+                            </button>
+                            <div className={`text-right ${item.signed_amount < 0 ? 'text-green-600' : 'text-red-500'}`}>
+                              {currencyFormatter.format(Math.abs(item.amount))}
+                            </div>
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                aria-label={isReconciled ? t('common.moveToPending') : t('common.confirmTransaction')}
+                                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${getStatusButtonClass(item.status)}`}
+                                onClick={() => void toggleConfirm(item)}
+                              >
+                                <StatusIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </ChartCard>

@@ -12,6 +12,7 @@ class TransactionCategoryBase(BaseModel):
     transaction_type: TransactionType
     name: str
     color: str = "#5B8DEF"
+    icon: str = "folder"
     budget: Optional[Decimal] = None
     budget_scope: BudgetScope = BudgetScope.ALL_MONTHS
     budget_month: Optional[date] = None
@@ -25,6 +26,7 @@ class TransactionCategoryUpdate(BaseModel):
     transaction_type: Optional[TransactionType] = None
     name: Optional[str] = None
     color: Optional[str] = None
+    icon: Optional[str] = None
     budget: Optional[Decimal] = None
     budget_scope: Optional[BudgetScope] = None
     budget_month: Optional[date] = None

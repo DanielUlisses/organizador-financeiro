@@ -108,7 +108,19 @@ python scripts/meu_dinheiro/create_accounts.py "$MEU_DINHEIRO_CSV" --dry-run
 
 Por padrão usa `--user-id=1`. Outro usuário: `--user-id=2`.
 
-### 6. Importar transações
+### 6. Criar/atualizar categorias (com cor e ícone)
+
+As categorias são extraídas da coluna **Categoria** do CSV, separadas por tipo de transação (receita/despesa/transferência).  
+O script faz **upsert**: cria as faltantes e atualiza cor/ícone das existentes.
+
+```bash
+python scripts/meu_dinheiro/create_categories.py "$MEU_DINHEIRO_CSV"
+
+# Dry-run (só mostra o que faria)
+python scripts/meu_dinheiro/create_categories.py "$MEU_DINHEIRO_CSV" --dry-run
+```
+
+### 7. Importar transações
 
 ```bash
 python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
@@ -117,7 +129,53 @@ python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
 python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV" --dry-run
 ```
 
-Linhas sem **data efetiva** ou sem **valor efetivo** são ignoradas. Para incluir linhas sem data efetiva (evitar ignorar): `--importar-sem-data` (ainda assim é necessário ter valor).
+Por padrão, quando faltar **data efetiva** e/ou **valor efetivo**, o import usa **Data prevista** e **Valor previsto** (transação entra como `pending`, ou seja, planejada).  
+Para importar **somente efetivado** (ignorar planejadas), use `--somente-efetivo`.
+
+## Limpar só transações (mantendo contas)
+
+Se você quer rerodar o import sem recriar contas, rode este bloco no banco alvo:
+
+```bash
+cd backend
+python - <<'PY'
+from sqlalchemy import text
+from app.db import SessionLocal
+
+sql = """
+TRUNCATE TABLE payment_tags RESTART IDENTITY;
+TRUNCATE TABLE payment_occurrences RESTART IDENTITY CASCADE;
+TRUNCATE TABLE recurring_payment_overrides RESTART IDENTITY CASCADE;
+TRUNCATE TABLE payments RESTART IDENTITY CASCADE;
+"""
+
+db = SessionLocal()
+try:
+    db.execute(text(sql))
+    db.commit()
+    print("Transações removidas. Contas mantidas.")
+finally:
+    db.close()
+PY
+```
+
+Se também quiser recriar categorias do zero:
+
+```bash
+cd backend
+python - <<'PY'
+from sqlalchemy import text
+from app.db import SessionLocal
+
+db = SessionLocal()
+try:
+    db.execute(text("DELETE FROM transaction_categories WHERE user_id = :uid"), {"uid": 1})
+    db.commit()
+    print("Categorias removidas para user_id=1.")
+finally:
+    db.close()
+PY
+```
 
 ## Resumo dos comandos (copiar/colar)
 
@@ -140,7 +198,10 @@ python scripts/seed_default_user.py
 export MEU_DINHEIRO_CSV=~/Downloads/Meu_Dinheiro_20260219232317.csv
 python scripts/meu_dinheiro/create_accounts.py "$MEU_DINHEIRO_CSV"
 
-# 5) Transações
+# 5) Categorias
+python scripts/meu_dinheiro/create_categories.py "$MEU_DINHEIRO_CSV"
+
+# 6) Transações
 python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
 ```
 
@@ -149,6 +210,7 @@ python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
 - **parse_csv.py**: parser do CSV (datas BR, valor BR, colunas em português); funções `iterar_linhas`, `contas_unicas`, `contas_todas_unicas`, etc. Aceita CSV com ou sem coluna "Venc. Fatura".
 - **combine_meu_dinheiro_csv.py**: combina dois ou mais CSVs e deduplica por "ID Único" (mantém a linha do último arquivo em duplicatas). Saída no formato de 16 colunas.
 - **create_accounts.py**: cria `bank_accounts` e `credit_cards` a partir de **Conta** e **Conta transferência** do CSV.
-- **import_transactions.py**: cria `payments` (ONE_TIME) e `payment_occurrences`. "Saldo inicial" vira receita na conta na data efetiva. "Transferência" e "Pagamento" são uma única transação por par origem/destino (deduplicação por data, valor e contas para não duplicar em origem e destino).
+- **create_categories.py**: cria/atualiza `transaction_categories` a partir do CSV, definindo cor e ícone por categoria.
+- **import_transactions.py**: cria `payments` (ONE_TIME) e `payment_occurrences`. "Saldo inicial" vira receita na conta na data efetiva. Em "Transferência"/"Pagamento", a direção é definida pelo sinal de `Valor efetivo` na conta da linha (valor positivo = entrada na conta da linha; valor negativo = saída). Deduplicação por `ID Único` quando disponível. Quando houver categoria correspondente criada, o `category_id` é preenchido.
 
 Nenhum desses scripts é usado pela API ou pelo front; são apenas ferramentas de carga inicial.

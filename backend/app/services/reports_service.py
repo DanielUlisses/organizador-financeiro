@@ -97,6 +97,41 @@ class ReportsService:
         }
 
     @staticmethod
+    def get_currency_metrics(
+        db: Session,
+        user_id: int,
+        start_date: date,
+        end_date: date,
+    ) -> Dict:
+        entries = ReportsService._collect_entries(db, user_id, start_date, end_date)
+        metrics: Dict[str, Dict[str, Decimal]] = defaultdict(
+            lambda: {"income": Decimal("0.00"), "expenses": Decimal("0.00")}
+        )
+
+        for entry in entries:
+            if entry["transaction_type"] == "transfer":
+                continue
+            currency = (entry.get("currency") or "USD").upper()
+            if entry["is_income"]:
+                metrics[currency]["income"] += entry["amount"]
+            else:
+                metrics[currency]["expenses"] += entry["amount"]
+
+        return {
+            "user_id": user_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "metrics": [
+                {
+                    "currency": currency,
+                    "income": values["income"],
+                    "expenses": values["expenses"],
+                }
+                for currency, values in sorted(metrics.items(), key=lambda item: item[0])
+            ],
+        }
+
+    @staticmethod
     def _collect_entries(db: Session, user_id: int, start_date: date, end_date: date) -> List[Dict]:
         ignored_statuses = [PaymentStatus.CANCELLED, PaymentStatus.FAILED]
 
@@ -129,6 +164,8 @@ class ReportsService:
                     "amount": occurrence.amount,
                     "category": category,
                     "is_income": transaction_type == "income",
+                    "transaction_type": transaction_type,
+                    "currency": payment.currency,
                 }
             )
             seen_payment_ids.add(payment.id)
@@ -159,6 +196,8 @@ class ReportsService:
                     "amount": payment.amount,
                     "category": category,
                     "is_income": transaction_type == "income",
+                    "transaction_type": transaction_type,
+                    "currency": payment.currency,
                 }
             )
 

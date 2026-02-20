@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpDown, Check, Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUpDown, Check, CircleDashed, Clock3, Pencil, Trash2, X } from 'lucide-react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { Button } from '@/components/ui/button'
 import { CHART_THEME } from '@/lib/chart-colors'
+import { getCategoryIconFromMetadata } from '@/lib/category-icons'
+import { getDefaultCurrency } from '@/pages/Settings/settings-sections'
 import {
   defaultChildCategory,
   getTransactionTypeFromBackendCategory,
@@ -37,18 +40,39 @@ type PaymentRow = AccountPayment & {
   tag_ids?: number[] | null
 }
 
+type StatementRow =
+  | { type: 'group'; key: string; date: string; closingBalance: number }
+  | { type: 'carry'; key: string }
+  | { type: 'payment'; key: string; payment: PaymentRow }
+
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const USER_ID = 1
-const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 const EFFECTIVE_STATUSES = new Set(['processed', 'reconciled'])
 const PENDING_STATUSES = new Set(['pending', 'scheduled'])
+const getStatusIcon = (status?: string | null) => {
+  const value = (status ?? '').toLowerCase()
+  if (value === 'reconciled') return Check
+  if (value === 'processed') return Check
+  if (value === 'scheduled' || value === 'planned') return Clock3
+  if (value === 'cancelled') return X
+  return CircleDashed
+}
+const getStatusButtonClass = (status?: string | null) => {
+  const value = (status ?? '').toLowerCase()
+  if (value === 'reconciled') return 'border-emerald-500 bg-emerald-500 text-white'
+  if (value === 'processed') return 'border-emerald-300 bg-emerald-100 text-emerald-700'
+  if (value === 'scheduled' || value === 'planned') return 'border-amber-300 bg-amber-100 text-amber-700'
+  if (value === 'cancelled') return 'border-rose-300 bg-rose-100 text-rose-700'
+  return 'bg-card'
+}
 const normalizeDateKey = (value?: string | null) => (value ?? '').slice(0, 10)
 const toYmd = (value: Date) =>
   `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 
 export function AccountsPage() {
   const { currentMonth } = useMonthContext()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = i18n.language === 'pt-BR' ? 'pt-BR' : 'en-US'
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -69,8 +93,9 @@ export function AccountsPage() {
 
   const [transferToId, setTransferToId] = useState<number | null>(null)
   const [transferAmount, setTransferAmount] = useState('0')
+  const [transferReceivedAmount, setTransferReceivedAmount] = useState('')
   const [transferDescription, setTransferDescription] = useState('Transfer between accounts')
-  const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string }>>([])
+  const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string; icon?: string; color?: string }>>([])
   const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
   const [editTagIds, setEditTagIds] = useState<number[]>([])
   const [recurringScope, setRecurringScope] = useState<'only_event' | 'from_event_forward' | 'all_events'>('only_event')
@@ -85,19 +110,68 @@ export function AccountsPage() {
     color: '#6366F1',
   })
 
+  const fetchAllPayments = async () => {
+    const pageSize = 500
+    let skip = 0
+    const all: Array<{
+      id: number
+      description: string
+      amount: unknown
+      category?: string
+      category_id?: number
+      due_date?: string
+      start_date?: string
+      payment_type?: string
+      status?: string
+      notes?: string
+      from_account_type?: string
+      from_account_id?: number
+      to_account_type?: string
+      to_account_id?: number
+      tag_ids?: number[]
+    }> = []
+
+    while (true) {
+      const response = await fetch(`${API_BASE_URL}/payments?user_id=${USER_ID}&skip=${skip}&limit=${pageSize}`)
+      if (!response.ok) throw new Error('Failed to load account statement data.')
+      const chunk = (await response.json()) as Array<{
+        id: number
+        description: string
+        amount: unknown
+        category?: string
+        category_id?: number
+        due_date?: string
+        start_date?: string
+        payment_type?: string
+        status?: string
+        notes?: string
+        from_account_type?: string
+        from_account_id?: number
+        to_account_type?: string
+        to_account_id?: number
+        tag_ids?: number[]
+      }>
+      all.push(...chunk)
+      if (chunk.length < pageSize) break
+      skip += pageSize
+    }
+
+    return all
+  }
+
   const loadData = async () => {
     setLoading(true)
     setError(null)
     setNotice(null)
     try {
-      const [accountsRes, paymentsRes, categoriesRes, tagsRes] = await Promise.all([
+      const [accountsRes, rawPayments, categoriesRes, tagsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/bank-accounts?user_id=${USER_ID}`),
-        fetch(`${API_BASE_URL}/payments?user_id=${USER_ID}&limit=500`),
+        fetchAllPayments(),
         fetch(`${API_BASE_URL}/transaction-metadata/categories?user_id=${USER_ID}`),
         fetch(`${API_BASE_URL}/transaction-metadata/tags?user_id=${USER_ID}`),
       ])
 
-      if (!accountsRes.ok || !paymentsRes.ok || !categoriesRes.ok || !tagsRes.ok) {
+      if (!accountsRes.ok || !categoriesRes.ok || !tagsRes.ok) {
         throw new Error('Failed to load account statement data.')
       }
 
@@ -124,23 +198,6 @@ export function AccountsPage() {
       setAccounts(accountData)
       setSelectedAccountId((current) => current ?? accountData[0]?.id ?? null)
 
-      const rawPayments = (await paymentsRes.json()) as Array<{
-        id: number
-        description: string
-        amount: unknown
-        category?: string
-        category_id?: number
-        due_date?: string
-        start_date?: string
-        payment_type?: string
-        status?: string
-        notes?: string
-        from_account_type?: string
-        from_account_id?: number
-        to_account_type?: string
-        to_account_id?: number
-        tag_ids?: number[]
-      }>
       const recurringPayments = rawPayments.filter((payment) => payment.payment_type === 'recurring')
       const occurrenceResponses = await Promise.all(
         recurringPayments.map(async (payment) => {
@@ -163,7 +220,7 @@ export function AccountsPage() {
             description: payment.description,
             amount: Number(payment.amount),
             category: payment.category,
-            category_id: payment.category_id,
+            category_id: payment.category_id != null ? Number(payment.category_id) : undefined,
             due_date: payment.due_date,
             status: payment.status,
             notes: payment.notes,
@@ -185,7 +242,7 @@ export function AccountsPage() {
             description: payment.description,
             amount: Number(occurrence.amount),
             category: payment.category,
-            category_id: payment.category_id,
+            category_id: payment.category_id != null ? Number(payment.category_id) : undefined,
             due_date: occurrence.scheduled_date,
             status: occurrence.status ?? payment.status,
             notes: occurrence.notes ?? payment.notes,
@@ -198,12 +255,14 @@ export function AccountsPage() {
         }
       }
       setPayments(flattenedPayments)
-      const rawCategories = (await categoriesRes.json()) as Array<{ id: number; transaction_type: string; name: string }>
+      const rawCategories = (await categoriesRes.json()) as Array<{ id: number; transaction_type: string; name: string; icon?: string; color?: string }>
       setCategories(
         rawCategories.map((item) => ({
           id: item.id,
           transaction_type: getTransactionTypeFromBackendCategory(item.transaction_type),
           name: item.name,
+          icon: item.icon ?? 'wallet',
+          color: item.color,
         })),
       )
       const rawTags = (await tagsRes.json()) as Array<{ id: number; name: string }>
@@ -234,6 +293,17 @@ export function AccountsPage() {
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
+  )
+  const destinationAccount = useMemo(
+    () => accounts.find((account) => account.id === transferToId) ?? null,
+    [accounts, transferToId],
+  )
+  const selectedCurrencyCode = (selectedAccount?.currency ?? getDefaultCurrency()).toUpperCase()
+  const destinationCurrencyCode = (destinationAccount?.currency ?? selectedCurrencyCode).toUpperCase()
+  const isCrossCurrencyTransfer = Boolean(destinationAccount && selectedCurrencyCode !== destinationCurrencyCode)
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat(locale, { style: 'currency', currency: selectedCurrencyCode }),
+    [locale, selectedCurrencyCode],
   )
 
   const monthlyPayments = useMemo(
@@ -310,6 +380,45 @@ export function AccountsPage() {
     groups.sort((a, b) => a.date.localeCompare(b.date))
     return sortOrder === 'older' ? groups : groups.reverse()
   }, [statementPayments, selectedAccount, selectedAccountId, sortOrder, carryOverBalance, monthStartKey])
+
+  const statementRows = useMemo<StatementRow[]>(
+    () =>
+      statementGroupedByDate.flatMap((group) => {
+        const headerRow: StatementRow = {
+          type: 'group',
+          key: `group-${group.date}`,
+          date: group.date,
+          closingBalance: group.closingBalance,
+        }
+        if (group.items.length === 0) {
+          return [headerRow, { type: 'carry', key: `carry-${group.date}` }]
+        }
+        return [
+          headerRow,
+          ...group.items.map(
+            (payment): StatementRow => ({
+              type: 'payment',
+              key: `payment-${payment.id}`,
+              payment,
+            }),
+          ),
+        ]
+      }),
+    [statementGroupedByDate],
+  )
+  const statementListRef = useRef<HTMLDivElement | null>(null)
+  const statementVirtualizer = useVirtualizer({
+    count: statementRows.length,
+    getScrollElement: () => statementListRef.current,
+    estimateSize: (index) => {
+      const row = statementRows[index]
+      if (!row) return 48
+      if (row.type === 'group') return 40
+      if (row.type === 'carry') return 32
+      return 52
+    },
+    overscan: 12,
+  })
 
   const totals = useMemo(() => {
     if (!selectedAccountId) return { inflow: 0, outflow: 0, net: 0 }
@@ -646,27 +755,78 @@ export function AccountsPage() {
       setError('Select a different destination account for transfer.')
       return
     }
+    const outgoingAmount = Number(transferAmount)
+    if (Number.isNaN(outgoingAmount) || outgoingAmount <= 0) {
+      setError('Transfer amount must be greater than zero.')
+      return
+    }
+    const incomingAmount = isCrossCurrencyTransfer ? Number(transferReceivedAmount) : outgoingAmount
+    if (Number.isNaN(incomingAmount) || incomingAmount <= 0) {
+      setError('Destination amount must be greater than zero.')
+      return
+    }
     try {
-      const response = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: transferDescription,
-          amount: Number(transferAmount),
-          currency: 'USD',
-          category: 'transfer',
-          from_account_type: 'bank_account',
-          from_account_id: selectedAccountId,
-          to_account_type: 'bank_account',
-          to_account_id: transferToId,
-          due_date: new Date().toISOString().slice(0, 10),
-          notes: '',
-        }),
-      })
-      if (!response.ok) throw new Error('Transfer creation failed.')
-      const created = (await response.json()) as PaymentRow
-      setPayments((current) => [{ ...created, amount: Number(created.amount) }, ...current])
+      const dueDate = new Date().toISOString().slice(0, 10)
+      const baseDescription = transferDescription.trim() || 'Transfer between accounts'
+
+      if (!isCrossCurrencyTransfer) {
+        const response = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: baseDescription,
+            amount: outgoingAmount,
+            currency: selectedCurrencyCode,
+            category: 'transfer',
+            from_account_type: 'bank_account',
+            from_account_id: selectedAccountId,
+            to_account_type: 'bank_account',
+            to_account_id: transferToId,
+            due_date: dueDate,
+            notes: '',
+          }),
+        })
+        if (!response.ok) throw new Error('Transfer creation failed.')
+        const created = (await response.json()) as PaymentRow
+        setPayments((current) => [{ ...created, amount: Number(created.amount) }, ...current])
+      } else {
+        const outboundRes = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: `${baseDescription} (${selectedCurrencyCode} → ${destinationCurrencyCode})`,
+            amount: outgoingAmount,
+            currency: selectedCurrencyCode,
+            category: 'transfer',
+            from_account_type: 'bank_account',
+            from_account_id: selectedAccountId,
+            to_account_type: null,
+            to_account_id: null,
+            due_date: dueDate,
+            notes: `cross_currency_out to_account_id=${transferToId}`,
+          }),
+        })
+        if (!outboundRes.ok) throw new Error('Transfer creation failed.')
+        const inboundRes = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            description: `${baseDescription} (${selectedCurrencyCode} → ${destinationCurrencyCode})`,
+            amount: incomingAmount,
+            currency: destinationCurrencyCode,
+            category: 'transfer',
+            from_account_type: null,
+            from_account_id: null,
+            to_account_type: 'bank_account',
+            to_account_id: transferToId,
+            due_date: dueDate,
+            notes: `cross_currency_in from_account_id=${selectedAccountId}`,
+          }),
+        })
+        if (!inboundRes.ok) throw new Error('Transfer creation failed.')
+      }
       setNotice('Transfer created successfully.')
+      setTransferReceivedAmount('')
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Transfer action failed.')
@@ -784,14 +944,17 @@ export function AccountsPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-5 shadow-sm">
-          <p className="text-xs uppercase text-muted-foreground">Current balance</p>
-          <p className="mt-2 text-2xl font-semibold">{currency.format(displayedCurrentBalance)}</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Net this month: <span className={totals.net >= 0 ? 'text-green-600' : 'text-red-500'}>{currency.format(totals.net)}</span>
+        <div className="rounded-xl border-0 bg-gradient-to-br from-blue-800 via-blue-900 to-indigo-950 p-5 text-blue-50 shadow-lg shadow-blue-900/25 dark:from-blue-900 dark:via-indigo-950 dark:to-slate-950 dark:text-white">
+          <p className="text-xs uppercase tracking-wide text-blue-100/90">{t('dashboard.currentBalance')}</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight text-white">{currencyFormatter.format(displayedCurrentBalance)}</p>
+          <p className="mt-2 text-xs text-blue-100/90">
+            {t('common.netThisMonth')}:{' '}
+            <span className={totals.net >= 0 ? 'font-semibold text-emerald-300' : 'font-semibold text-rose-300'}>
+              {currencyFormatter.format(totals.net)}
+            </span>
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Expected end of month: <span className="font-medium">{currency.format(expectedEndOfMonthBalance)}</span>
+          <p className="mt-1 text-xs text-blue-100/90">
+            {t('common.expectedEndOfMonth')}: <span className="font-semibold text-white">{currencyFormatter.format(expectedEndOfMonthBalance)}</span>
           </p>
         </div>
       </div>
@@ -818,12 +981,11 @@ export function AccountsPage() {
                       <stop offset="95%" stopColor={CHART_THEME.series.expenses} stopOpacity={0.05} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis />
                   <Tooltip
                     formatter={(value: number | string, name: string) => [
-                      currency.format(Number(value)),
+                      currencyFormatter.format(Number(value)),
                       name === 'balance' ? t('common.balance') : t('common.dailyExpenses'),
                     ]}
                   />
@@ -839,7 +1001,7 @@ export function AccountsPage() {
                     dataKey="dailyExpenses"
                     stroke={CHART_THEME.series.expenses}
                     fill="url(#account-expenses-gradient)"
-                    strokeWidth={2}
+                    strokeWidth={3}
                     name={t('common.dailyExpenses')}
                   />
                 </AreaChart>
@@ -848,7 +1010,7 @@ export function AccountsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title={t('common.inflowVsOutflow')} subtitle={`${t('common.inflow')} ${currency.format(totals.inflow)} • ${t('common.outflow')} ${currency.format(totals.outflow)}`}>
+        <ChartCard title={t('common.inflowVsOutflow')} subtitle={`${t('common.inflow')} ${currencyFormatter.format(totals.inflow)} • ${t('common.outflow')} ${currencyFormatter.format(totals.outflow)}`}>
           {cashflowSeries.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('common.noCashflowPoints')}</p>
           ) : (
@@ -865,23 +1027,22 @@ export function AccountsPage() {
                       <stop offset="95%" stopColor={CHART_THEME.series.outflow} stopOpacity={0.04} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={(value: number | string) => currency.format(Number(value))} />
+                  <Tooltip formatter={(value: number | string) => currencyFormatter.format(Number(value))} />
                   <Area
                     type="monotone"
                     dataKey="inflow"
                     stroke={CHART_THEME.series.inflow}
                     fill="url(#account-inflow-gradient)"
-                    strokeWidth={2}
+                    strokeWidth={3}
                   />
                   <Area
                     type="monotone"
                     dataKey="outflow"
                     stroke={CHART_THEME.series.outflow}
                     fill="url(#account-outflow-gradient)"
-                    strokeWidth={2}
+                    strokeWidth={3}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -896,7 +1057,7 @@ export function AccountsPage() {
             {t('common.destination')}
             <select
               value={transferToId ?? ''}
-              onChange={(event) => setTransferToId(Number(event.target.value))}
+              onChange={(event) => setTransferToId(event.target.value ? Number(event.target.value) : null)}
               className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm"
             >
               <option value="">{t('common.selectAccount')}</option>
@@ -910,7 +1071,7 @@ export function AccountsPage() {
             </select>
           </label>
           <label className="text-sm">
-            {t('common.amount')}
+            {t('common.amount')} ({selectedCurrencyCode})
             <input
               type="number"
               min="0"
@@ -920,6 +1081,19 @@ export function AccountsPage() {
               className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm"
             />
           </label>
+          {isCrossCurrencyTransfer ? (
+            <label className="text-sm">
+              Destination receives ({destinationCurrencyCode})
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={transferReceivedAmount}
+                onChange={(event) => setTransferReceivedAmount(event.target.value)}
+                className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          ) : null}
           <label className="text-sm">
             {t('common.description')}
             <input
@@ -953,52 +1127,73 @@ export function AccountsPage() {
         {statementGroupedByDate.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('common.noTransactionsForPeriod')}</p>
         ) : (
-          <div className="space-y-2">
-            {statementGroupedByDate.map((group, groupIndex) => (
-              <div key={group.date} className={groupIndex % 2 === 1 ? 'rounded-md bg-secondary/20 px-2 py-1' : 'px-2 py-1'}>
-                <div className="mb-1 flex items-center justify-between border-b pb-1 text-sm font-semibold">
-                  <span>{group.date}</span>
-                  <span>{currency.format(group.closingBalance)}</span>
-                </div>
-                <div className="space-y-1">
-                  {group.items.length === 0 ? (
-                    <div className="px-2 py-1 text-xs text-muted-foreground">{t('common.carriedOver')}</div>
-                  ) : null}
-                  {group.items.map((payment) => {
-                    const signed = selectedAccountId ? getSignedAmount(payment, selectedAccountId) : payment.amount
-                    const isReconciled = (payment.status ?? '').toLowerCase() === 'reconciled'
-                    return (
-                      <div key={payment.id} className="grid grid-cols-12 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-background/60">
-                        <div className="col-span-4 truncate">{payment.description}</div>
-                        <div className="col-span-2 text-muted-foreground">{categories.find((item) => item.id === payment.category_id)?.name ?? '-'}</div>
-                        <div className="col-span-2 text-muted-foreground">{(payment.status ?? '') ? t(`status.${(payment.status ?? '').toLowerCase()}`, (payment.status ?? '')) : '-'}</div>
-                        <div className={`col-span-2 text-right ${signed >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {currency.format(Math.abs(signed))}
-                        </div>
-                        <div className="col-span-2 flex justify-end gap-1">
-                          <button
-                            type="button"
-                            aria-label={isReconciled ? t('common.moveToPending') : t('common.confirmTransaction')}
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${isReconciled ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-card'}`}
-                            onClick={() => void confirmPayment(payment.id)}
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={t('common.editTransaction')}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-card"
-                            onClick={() => openEditModal(payment)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
+          <div ref={statementListRef} className="max-h-[640px] overflow-auto">
+            <div className="relative w-full" style={{ height: `${statementVirtualizer.getTotalSize()}px` }}>
+              {statementVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = statementRows[virtualRow.index]
+                if (!row) return null
+                return (
+                  <div
+                    key={row.key}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    {row.type === 'group' ? (
+                      <div className="px-2 py-1">
+                        <div className="mb-1 flex items-center justify-between border-b pb-1 text-sm font-semibold">
+                          <span>{row.date}</span>
+                          <span>{currencyFormatter.format(row.closingBalance)}</span>
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
+                    ) : null}
+                    {row.type === 'carry' ? (
+                      <div className="px-4 py-1 text-xs text-muted-foreground">{t('common.carriedOver')}</div>
+                    ) : null}
+                    {row.type === 'payment' ? (
+                      (() => {
+                        const payment = row.payment
+                        const signed = selectedAccountId ? getSignedAmount(payment, selectedAccountId) : payment.amount
+                        const isReconciled = (payment.status ?? '').toLowerCase() === 'reconciled'
+                        const StatusIcon = getStatusIcon(payment.status)
+                        const category = categories.find((item) => item.id === Number(payment.category_id))
+                        const CategoryIcon = getCategoryIconFromMetadata(category?.icon, category?.name)
+                        return (
+                          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-xl px-3 py-2 text-sm hover:bg-background/60">
+                            <span
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border"
+                              style={{ backgroundColor: category?.color ? `${category.color}22` : undefined }}
+                              aria-hidden
+                            >
+                              <CategoryIcon className="h-4 w-4" style={{ color: category?.color ?? 'currentColor' }} />
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(payment)}
+                              className="truncate text-left font-medium underline-offset-2 hover:underline"
+                            >
+                              {payment.description}
+                            </button>
+                            <div className={`text-right ${signed >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                              {currencyFormatter.format(Math.abs(signed))}
+                            </div>
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                aria-label={isReconciled ? t('common.moveToPending') : t('common.confirmTransaction')}
+                                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${getStatusButtonClass(payment.status)}`}
+                                onClick={() => void confirmPayment(payment.id)}
+                              >
+                                <StatusIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </ChartCard>

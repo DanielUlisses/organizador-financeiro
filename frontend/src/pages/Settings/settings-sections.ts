@@ -49,6 +49,7 @@ export function setNotificationPreference(key: NotificationPreferenceKey, enable
 
 export const DEFAULT_CURRENCY_KEY = 'of_default_currency'
 export const TRANSACTION_ORDER_KEY = 'of_transaction_order'
+export const REDUCED_VISUAL_EFFECTS_KEY = 'of_reduced_visual_effects'
 
 export type TransactionOrder = 'older' | 'newer'
 
@@ -67,4 +68,16 @@ export function getTransactionOrder(): TransactionOrder {
 
 export function setTransactionOrder(order: TransactionOrder): void {
   localStorage.setItem(TRANSACTION_ORDER_KEY, order)
+}
+
+export function getReducedVisualEffects(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  return localStorage.getItem(REDUCED_VISUAL_EFFECTS_KEY) === 'true'
+}
+
+export function setReducedVisualEffects(enabled: boolean): void {
+  localStorage.setItem(REDUCED_VISUAL_EFFECTS_KEY, String(enabled))
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('of:reduced-visual-effects-changed', { detail: enabled }))
+  }
 }

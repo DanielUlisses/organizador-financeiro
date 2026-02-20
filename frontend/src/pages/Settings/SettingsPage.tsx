@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { Button } from '@/components/ui/button'
+import { CATEGORY_ICON_OPTIONS, getCategoryIcon } from '@/lib/category-icons'
 import {
   SETTINGS_SECTIONS,
   type SettingsSectionId,
@@ -14,6 +15,8 @@ import {
   getTransactionOrder,
   setTransactionOrder,
   type TransactionOrder,
+  getReducedVisualEffects,
+  setReducedVisualEffects,
 } from '@/pages/Settings/settings-sections'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -41,6 +44,7 @@ export function SettingsPage() {
       transaction_type: 'expense' | 'income' | 'transfer'
       name: string
       color: string
+      icon: string
       budget: number | null
       budget_scope: 'all_months' | 'current_month'
       budget_month: string | null
@@ -93,6 +97,7 @@ export function SettingsPage() {
     transaction_type: 'expense' as 'expense' | 'income' | 'transfer',
     name: '',
     color: '#5B8DEF',
+    icon: 'wallet',
   })
   const [newTag, setNewTag] = useState({ name: '', color: '#8B5CF6' })
   const [newCard, setNewCard] = useState({
@@ -125,6 +130,7 @@ export function SettingsPage() {
   const [notificationPrefs, setNotificationPrefs] = useState(getNotificationPreferences)
   const [defaultCurrency, setDefaultCurrencyState] = useState(getDefaultCurrency)
   const [transactionOrder, setTransactionOrderState] = useState<TransactionOrder>(getTransactionOrder)
+  const [reducedVisualEffects, setReducedVisualEffectsState] = useState(getReducedVisualEffects)
   const [editingBankId, setEditingBankId] = useState<number | null>(null)
   const [editBankForm, setEditBankForm] = useState({
     name: '',
@@ -162,6 +168,7 @@ export function SettingsPage() {
     transaction_type: 'expense' as 'expense' | 'income' | 'transfer',
     name: '',
     color: '#5B8DEF',
+    icon: 'wallet',
   })
   const [budgetForm, setBudgetForm] = useState({
     categoryId: '',
@@ -211,6 +218,7 @@ export function SettingsPage() {
         transaction_type: 'expense' | 'income' | 'transfer'
         name: string
         color: string
+        icon?: string
         budget: number | null
         budget_scope: 'all_months' | 'current_month'
         budget_month: string | null
@@ -251,7 +259,7 @@ export function SettingsPage() {
         currency?: string
         is_active?: boolean
       }>
-      setCategories(rawCategories)
+      setCategories(rawCategories.map((category) => ({ ...category, icon: category.icon ?? 'wallet' })))
       setTags(rawTags)
       setBankAccounts(
         rawAccounts.map((a) => ({
@@ -294,6 +302,7 @@ export function SettingsPage() {
           transaction_type: newCategory.transaction_type,
           name: newCategory.name,
           color: newCategory.color,
+          icon: newCategory.icon,
         }),
       })
       if (!response.ok) throw new Error('Failed to create category.')
@@ -301,6 +310,7 @@ export function SettingsPage() {
         transaction_type: 'expense',
         name: '',
         color: '#5B8DEF',
+        icon: 'wallet',
       })
       setNotice(t('settings.categoryCreated'))
       await loadData()
@@ -678,6 +688,7 @@ export function SettingsPage() {
       transaction_type: category.transaction_type,
       name: category.name,
       color: category.color,
+      icon: category.icon ?? 'wallet',
     })
   }
 
@@ -813,6 +824,19 @@ export function SettingsPage() {
                   <option value="older">{t('common.olderFirstLabel')}</option>
                   <option value="newer">{t('common.newerFirstLabel')}</option>
                 </select>
+              </label>
+              <label className="flex items-center gap-3 text-sm sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={reducedVisualEffects}
+                  onChange={(event) => {
+                    const enabled = event.target.checked
+                    setReducedVisualEffects(enabled)
+                    setReducedVisualEffectsState(enabled)
+                  }}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <span>{t('settings.reducedVisualEffects')}</span>
               </label>
             </div>
           </div>
@@ -1095,6 +1119,20 @@ export function SettingsPage() {
                     onChange={(event) => setNewCategory((current) => ({ ...current, name: event.target.value }))}
                   />
                 </label>
+                <label className="text-sm">
+                  Icon
+                  <select
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={newCategory.icon}
+                    onChange={(event) => setNewCategory((current) => ({ ...current, icon: event.target.value }))}
+                  >
+                    {CATEGORY_ICON_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="text-sm sm:col-span-2">
                   {t('settings.color')}
                   <div className="mt-1 flex items-center gap-2">
@@ -1197,6 +1235,14 @@ export function SettingsPage() {
                     {groupedCategories[type].map((category) => (
                       <div key={category.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
                         <span className="flex items-center gap-2">
+                          {(() => {
+                            const Icon = getCategoryIcon(category.icon)
+                            return (
+                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-muted">
+                                <Icon className="h-3.5 w-3.5" />
+                              </span>
+                            )
+                          })()}
                           <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: category.color }} />
                           {category.name} {category.budget ? `• ${category.budget}` : ''}
                         </span>
@@ -1627,6 +1673,20 @@ export function SettingsPage() {
                   value={editCategoryForm.name}
                   onChange={(event) => setEditCategoryForm((current) => ({ ...current, name: event.target.value }))}
                 />
+              </label>
+              <label className="text-sm">
+                Icon
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editCategoryForm.icon}
+                  onChange={(event) => setEditCategoryForm((current) => ({ ...current, icon: event.target.value }))}
+                >
+                  {CATEGORY_ICON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm sm:col-span-2">
                 {t('settings.color')}

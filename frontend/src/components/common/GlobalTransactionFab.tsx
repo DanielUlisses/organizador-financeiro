@@ -3,6 +3,7 @@ import { Calculator, Plus, X } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { useReducedVisualEffects } from '@/hooks/useReducedVisualEffects'
 import {
   defaultChildCategory,
   getTransactionTypeFromBackendCategory,
@@ -35,6 +36,7 @@ export function GlobalTransactionFab() {
   const { pathname } = useLocation()
   const { t } = useTranslation()
   const defaults = useMemo(() => getDefaultsByPath(pathname), [pathname])
+  const reducedVisualEffects = useReducedVisualEffects()
 
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +59,8 @@ export function GlobalTransactionFab() {
     localStorage.getItem('of_default_account_id') ?? '',
   )
   const [toAccountId, setToAccountId] = useState<string>('')
-  const [bankAccounts, setBankAccounts] = useState<Array<{ id: number; name: string }>>([])
+  const [transferReceivedAmount, setTransferReceivedAmount] = useState('')
+  const [bankAccounts, setBankAccounts] = useState<Array<{ id: number; name: string; currency?: string }>>([])
   const [creditCards, setCreditCards] = useState<Array<{ id: number; name: string }>>([])
   const [categories, setCategories] = useState<Array<{ id: number; transaction_type: TransactionType; name: string }>>([])
   const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
@@ -65,6 +68,13 @@ export function GlobalTransactionFab() {
   const [recurrenceFrequency, setRecurrenceFrequency] = useState('monthly')
   const [occurrenceCount, setOccurrenceCount] = useState('12')
   const [recurrenceAmountMode, setRecurrenceAmountMode] = useState<'total_split' | 'per_item'>('per_item')
+  const selectedSourceBankAccount = bankAccounts.find((account) => String(account.id) === fromAccountId)
+  const selectedDestinationBankAccount = bankAccounts.find((account) => String(account.id) === toAccountId)
+  const isCrossCurrencyTransfer =
+    transactionType === 'transfer' &&
+    fromAccountType === 'bank_account' &&
+    Boolean(selectedSourceBankAccount && selectedDestinationBankAccount) &&
+    (selectedSourceBankAccount?.currency ?? 'USD').toUpperCase() !== (selectedDestinationBankAccount?.currency ?? 'USD').toUpperCase()
 
   const calcTotal = calcTerms.reduce((sum, term) => sum + term, 0)
 
@@ -78,7 +88,7 @@ export function GlobalTransactionFab() {
           fetch(`${API_BASE_URL}/transaction-metadata/tags?user_id=${USER_ID}`),
         ])
         if (accountsRes.ok) {
-          const data = (await accountsRes.json()) as Array<{ id: number; name: string }>
+          const data = (await accountsRes.json()) as Array<{ id: number; name: string; currency?: string }>
           setBankAccounts(data)
         }
         if (cardsRes.ok) {
@@ -111,6 +121,7 @@ export function GlobalTransactionFab() {
     setFromAccountType(defaults.fromType === 'credit_card' ? 'credit_card' : 'bank_account')
     setFromAccountId(localStorage.getItem('of_default_account_id') ?? '')
     setToAccountId('')
+    setTransferReceivedAmount('')
     setDescription(defaults.fromType === 'credit_card' ? t('fab.newCardTransaction') : t('fab.newTransaction'))
     const defaultType: TransactionType = defaults.fromType === 'credit_card' ? 'expense' : 'expense'
     setTransactionType(defaultType)
@@ -150,27 +161,80 @@ export function GlobalTransactionFab() {
         const isIncome = transactionType === 'income'
         const sourceId = fromAccountId ? Number(fromAccountId) : null
         const destinationId = toAccountId ? Number(toAccountId) : null
+        const isTransfer = transactionType === 'transfer'
+        const sourceCurrency = (selectedSourceBankAccount?.currency ?? 'USD').toUpperCase()
+        const destinationCurrency = (selectedDestinationBankAccount?.currency ?? 'USD').toUpperCase()
         const finalFromId = isIncome ? null : sourceId
         const finalToId = isIncome ? sourceId : destinationId
-        const response = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            description,
-            amount: numericAmount,
-            category: transactionType,
-            category_id: selectedCategory?.id ?? null,
-            tag_ids: selectedTagIds,
-            currency: 'USD',
-            due_date: dueDate,
-            from_account_type: finalFromId ? fromAccountType : null,
-            from_account_id: finalFromId,
-            to_account_type: finalToId ? 'bank_account' : null,
-            to_account_id: finalToId,
-            notes,
-          }),
-        })
-        if (!response.ok) throw new Error('Failed to create transaction.')
+
+        if (isTransfer && isCrossCurrencyTransfer && sourceId && destinationId) {
+          const receivedAmount = Number(transferReceivedAmount)
+          if (Number.isNaN(receivedAmount) || receivedAmount <= 0) {
+            setError('Destination amount must be greater than zero.')
+            return
+          }
+          const baseDescription = description.trim() || 'Transfer between accounts'
+
+          const outboundResponse = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              description: `${baseDescription} (${sourceCurrency} -> ${destinationCurrency})`,
+              amount: numericAmount,
+              category: 'transfer',
+              category_id: selectedCategory?.id ?? null,
+              tag_ids: selectedTagIds,
+              currency: sourceCurrency,
+              due_date: dueDate,
+              from_account_type: 'bank_account',
+              from_account_id: sourceId,
+              to_account_type: null,
+              to_account_id: null,
+              notes: `cross_currency_out to_account_id=${destinationId} ${notes}`.trim(),
+            }),
+          })
+          if (!outboundResponse.ok) throw new Error('Failed to create transaction.')
+
+          const inboundResponse = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              description: `${baseDescription} (${sourceCurrency} -> ${destinationCurrency})`,
+              amount: receivedAmount,
+              category: 'transfer',
+              category_id: selectedCategory?.id ?? null,
+              tag_ids: selectedTagIds,
+              currency: destinationCurrency,
+              due_date: dueDate,
+              from_account_type: null,
+              from_account_id: null,
+              to_account_type: 'bank_account',
+              to_account_id: destinationId,
+              notes: `cross_currency_in from_account_id=${sourceId} ${notes}`.trim(),
+            }),
+          })
+          if (!inboundResponse.ok) throw new Error('Failed to create transaction.')
+        } else {
+          const response = await fetch(`${API_BASE_URL}/payments/one-time?user_id=${USER_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              description,
+              amount: numericAmount,
+              category: transactionType,
+              category_id: selectedCategory?.id ?? null,
+              tag_ids: selectedTagIds,
+              currency: sourceCurrency,
+              due_date: dueDate,
+              from_account_type: finalFromId ? fromAccountType : null,
+              from_account_id: finalFromId,
+              to_account_type: finalToId ? 'bank_account' : null,
+              to_account_id: finalToId,
+              notes,
+            }),
+          })
+          if (!response.ok) throw new Error('Failed to create transaction.')
+        }
         setNotice(t('fab.transactionCreated'))
         window.dispatchEvent(new CustomEvent('of:transactions-changed'))
         setOpen(false)
@@ -223,18 +287,30 @@ export function GlobalTransactionFab() {
       <button
         type="button"
         onClick={openModal}
-        className="fixed bottom-6 right-6 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+        className="fixed bottom-6 right-6 z-40 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/30 transition-transform hover:-translate-y-0.5"
         aria-label={t('fab.addTransaction')}
       >
-        <Plus className="h-5 w-5" />
+        <Plus className="h-6 w-6" />
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/30 p-4 sm:items-center sm:justify-center">
-          <div className="w-full max-w-xl rounded-xl border bg-card p-5 shadow-xl">
+        <div
+          className={`fixed inset-0 z-50 flex items-end justify-end bg-slate-950/45 p-4 sm:items-center sm:justify-center ${
+            reducedVisualEffects ? '' : 'backdrop-blur-sm'
+          }`}
+        >
+          <div
+            className={`w-full max-w-xl rounded-3xl p-5 shadow-xl ${
+              reducedVisualEffects ? 'border bg-card' : 'of-surface'
+            }`}
+          >
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">{t('fab.addNewTransaction')}</h3>
-              <button type="button" onClick={() => setOpen(false)} className="rounded-md border p-1">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-300/70 text-red-500 transition-colors hover:bg-red-50 dark:border-red-800/60 dark:hover:bg-red-900/20"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -379,6 +455,19 @@ export function GlobalTransactionFab() {
                     ))}
                 </select>
               </label>
+              {isCrossCurrencyTransfer ? (
+                <label className="text-sm">
+                  Destination receives ({(selectedDestinationBankAccount?.currency ?? 'USD').toUpperCase()})
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={transferReceivedAmount}
+                    onChange={(event) => setTransferReceivedAmount(event.target.value)}
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  />
+                </label>
+              ) : null}
               <label className="text-sm sm:col-span-2">
                 {t('common.notes')}
                 <input
@@ -479,7 +568,7 @@ export function GlobalTransactionFab() {
             {notice ? <p className="mt-3 text-sm text-emerald-600">{notice}</p> : null}
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>
+              <Button variant="outline" className="border-red-300/80 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setOpen(false)}>
                 {t('common.close')}
               </Button>
               <Button onClick={() => void submit()}>{t('common.create')}</Button>

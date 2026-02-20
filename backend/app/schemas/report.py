@@ -35,3 +35,16 @@ class IncomeVsExpensesResponse(BaseModel):
     total_expenses: Decimal
     net: Decimal
     series: List[IncomeExpensePoint]
+
+
+class CurrencyMetricPoint(BaseModel):
+    currency: str
+    income: Decimal
+    expenses: Decimal
+
+
+class CurrencyMetricsResponse(BaseModel):
+    user_id: int
+    start_date: date
+    end_date: date
+    metrics: List[CurrencyMetricPoint]

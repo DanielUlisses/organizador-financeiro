@@ -47,6 +47,7 @@ class TransactionCategory(Base):
     transaction_type = Column(Enum(TransactionType), nullable=False)
     name = Column(String, nullable=False)
     color = Column(String(7), nullable=False, default="#5B8DEF")
+    icon = Column(String(40), nullable=False, default="folder")
     budget = Column(Numeric(15, 2), nullable=True)
     budget_scope = Column(Enum(BudgetScope), nullable=False, default=BudgetScope.ALL_MONTHS)
     budget_month = Column(Date, nullable=True)
