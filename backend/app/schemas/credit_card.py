@@ -8,6 +8,7 @@ from decimal import Decimal
 class CreditCardBase(BaseModel):
     name: str
     issuer: Optional[str] = None
+    card_network: Optional[str] = None  # 'visa' | 'mastercard' | 'amex'
     card_number_last4: Optional[str] = None
     credit_limit: Decimal
     default_payment_account_id: Optional[int] = None
@@ -23,6 +24,7 @@ class CreditCardCreate(CreditCardBase):
 class CreditCardUpdate(BaseModel):
     name: Optional[str] = None
     issuer: Optional[str] = None
+    card_network: Optional[str] = None
     card_number_last4: Optional[str] = None
     credit_limit: Optional[Decimal] = None
     default_payment_account_id: Optional[int] = None
@@ -80,3 +82,17 @@ class CreditCardStatementResponse(BaseModel):
     payments_total: Decimal
     statement_balance: Decimal
     transactions: List[CreditCardStatementTransactionResponse]
+
+
+class CreditCardInvoiceHistoryEntry(BaseModel):
+    period_label: str  # e.g. "Nov 2024"
+    cycle_start_date: date
+    cycle_end_date: date
+    charges_total: Decimal
+    statement_balance: Decimal
+
+
+class CreditCardInvoiceHistoryResponse(BaseModel):
+    card_id: int
+    months: int
+    entries: List[CreditCardInvoiceHistoryEntry]

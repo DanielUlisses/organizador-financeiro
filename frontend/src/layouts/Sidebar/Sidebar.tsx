@@ -33,8 +33,18 @@ export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) 
         data-testid="sidebar-root"
         data-collapsed={collapsed ? 'true' : 'false'}
       >
-        <div className="flex h-14 items-center border-b px-3">
-          <div className="truncate text-sm font-semibold tracking-tight">{collapsed ? 'OF' : 'Organizador Financeiro'}</div>
+        <div className="flex h-14 items-center gap-2 border-b px-3">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+            <img
+              src="/logo.svg"
+              alt=""
+              className="h-9 w-9 select-none object-contain object-center"
+              width={36}
+              height={36}
+              decoding="async"
+            />
+          </span>
+          {!collapsed ? <span className="truncate text-sm font-semibold tracking-tight">Organizador Financeiro</span> : null}
         </div>
         <div className="px-3 pt-3 text-[10px] uppercase tracking-wide text-muted-foreground">{collapsed ? 'Nav' : 'Navigation'}</div>
         <nav className="space-y-1 p-2">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, Trash2 } from 'lucide-react'
+import { ArrowUpDown, Check, Pencil, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
@@ -21,6 +22,7 @@ type BankAccount = {
   balance: number
   account_type: string
   bank_name?: string | null
+  color?: string | null
 }
 
 type PaymentRow = AccountPayment & {
@@ -44,6 +46,7 @@ const toYmd = (value: Date) =>
 
 export function AccountsPage() {
   const { currentMonth } = useMonthContext()
+  const navigate = useNavigate()
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -92,6 +95,7 @@ export function AccountsPage() {
         balance: unknown
         account_type: string
         bank_name?: string
+        color?: string | null
       }>
       const accountData: BankAccount[] = rawAccounts.map((account) => ({
         id: account.id,
@@ -99,6 +103,7 @@ export function AccountsPage() {
         balance: Number(account.balance),
         account_type: account.account_type,
         bank_name: account.bank_name,
+        color: account.color ?? undefined,
       }))
       setAccounts(accountData)
       setSelectedAccountId((current) => current ?? accountData[0]?.id ?? null)
@@ -360,6 +365,31 @@ export function AccountsPage() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([day, data]) => ({ day: day.slice(5, 10), ...data }))
   }, [statementPayments, selectedAccountId])
+
+  const balanceHistory12Mo = useMemo(() => {
+    if (!selectedAccountId || !selectedAccount) return []
+    const now = new Date()
+    const months: { label: string; balance: number; year: number; month: number }[] = []
+    let running = displayedCurrentBalance
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const y = d.getFullYear()
+      const m = d.getMonth()
+      const monthStart = toYmd(new Date(y, m, 1))
+      const monthEnd = toYmd(new Date(y, m + 1, 0))
+      let net = 0
+      for (const p of payments) {
+        const status = (p.status ?? 'pending').toLowerCase()
+        if (!EFFECTIVE_STATUSES.has(status)) continue
+        const key = normalizeDateKey(p.due_date)
+        if (!key || key < monthStart || key > monthEnd) continue
+        if (p.from_account_id === selectedAccountId || p.to_account_id === selectedAccountId) net += getSignedAmount(p, selectedAccountId)
+      }
+      running -= net
+      months.push({ label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), balance: running, year: y, month: m })
+    }
+    return months.reverse()
+  }, [selectedAccountId, selectedAccount, payments, displayedCurrentBalance])
 
   const updatePayment = async (paymentId: number, payload: Record<string, unknown>, successMessage: string) => {
     const target = payments.find((payment) => payment.id === paymentId)
@@ -632,55 +662,61 @@ export function AccountsPage() {
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <SectionHeader
           title="Accounts"
-          subtitle="Monthly account statement with transaction consolidation, edits, deletes, and transfers"
-          actions={<MonthNavigator />}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor="account-select">
+                Account
+              </label>
+              <select
+                id="account-select"
+                value={selectedAccountId ?? ''}
+                onChange={(event) => setSelectedAccountId(Number(event.target.value))}
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+              <MonthNavigator />
+              <Button variant="outline" size="sm" onClick={() => void loadData()}>
+                Refresh
+              </Button>
+            </div>
+          }
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border bg-card p-5 shadow-sm lg:col-span-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm font-medium" htmlFor="account-select">
-              Account
-            </label>
-            <select
-              id="account-select"
-              value={selectedAccountId ?? ''}
-              onChange={(event) => setSelectedAccountId(Number(event.target.value))}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-
-            <label className="ml-4 text-sm font-medium" htmlFor="sort-order">
-              Sort
-            </label>
-            <select
-              id="sort-order"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value as 'older' | 'newer')}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              <option value="newer">Newer first</option>
-              <option value="older">Older first</option>
-            </select>
-
-            <Button variant="outline" onClick={() => void loadData()}>
-              Refresh
+        <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:col-span-2">
+          {balanceHistory12Mo.length > 0 && (
+            <div className="absolute inset-0 opacity-20">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={balanceHistory12Mo} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="bank-card-bg" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={selectedAccount?.color ?? CHART_THEME.series.balance} stopOpacity={0.4} />
+                      <stop offset="100%" stopColor={selectedAccount?.color ?? CHART_THEME.series.balance} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="balance" fill="url(#bank-card-bg)" stroke="none" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          <div className="relative flex items-start justify-between gap-4 p-5">
+            <div>
+              <h3 className="text-xl font-semibold">{selectedAccount?.bank_name ?? selectedAccount?.name ?? 'Bank account'}</h3>
+              <p className="mt-0.5 text-sm capitalize text-muted-foreground">{selectedAccount?.account_type ?? '—'}</p>
+              {hasUnassignedTransactions ? (
+                <p className="mt-2 text-xs text-amber-700">Statement includes unassigned transactions.</p>
+              ) : null}
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate('/settings')} aria-label="Edit bank account">
+              <Pencil className="h-4 w-4" />
             </Button>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {selectedAccount
-              ? `${selectedAccount.bank_name ?? 'Bank'} • ${selectedAccount.account_type}`
-              : 'Select an account'}
-          </p>
-          {hasUnassignedTransactions ? (
-            <p className="mt-2 text-xs text-amber-700">Statement includes unassigned transactions. Link accounts for strict statements.</p>
-          ) : null}
         </div>
 
         <div className="rounded-xl border bg-card p-5 shadow-sm">
@@ -832,7 +868,23 @@ export function AccountsPage() {
         </div>
       </ChartCard>
 
-      <ChartCard title="Account statement" subtitle={`${statementPayments.length} transactions in selected month`}>
+      <ChartCard
+        title="Account statement"
+        subtitle={`${statementPayments.length} transactions in selected month`}
+        titleAction={
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Sort</span>
+            <button
+              type="button"
+              onClick={() => setSortOrder((o) => (o === 'older' ? 'newer' : 'older'))}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background hover:bg-muted"
+              aria-label={sortOrder === 'older' ? 'Newer first' : 'Older first'}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+            </button>
+          </div>
+        }
+      >
         {statementGroupedByDate.length === 0 ? (
           <p className="text-sm text-muted-foreground">No transactions available for selected period.</p>
         ) : (

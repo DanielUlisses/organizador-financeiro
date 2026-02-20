@@ -298,6 +298,43 @@ class CreditCardService:
         }
 
     @staticmethod
+    def get_invoice_history(
+        db: Session, card_id: int, user_id: int, months: int = 12
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Return invoice totals for the last N months (one entry per billing cycle)."""
+        card = CreditCardService.get_card(db, card_id, user_id)
+        if not card:
+            return None
+        today = date.today()
+        entries: List[Dict[str, Any]] = []
+        seen_cycles = set()
+        for i in range(months * 2):
+            ref = today - timedelta(days=15 * i)
+            ref = ref.replace(day=15)
+            cycle = CreditCardService.get_invoice_cycle(db, card_id, user_id, ref)
+            if not cycle:
+                continue
+            key = (cycle["cycle_start_date"], cycle["cycle_end_date"])
+            if key in seen_cycles:
+                continue
+            seen_cycles.add(key)
+            summary = CreditCardService.get_statement_summary(db, card_id, user_id, ref)
+            if not summary:
+                continue
+            period_label = ref.strftime("%b %Y")
+            entries.append({
+                "period_label": period_label,
+                "cycle_start_date": cycle["cycle_start_date"],
+                "cycle_end_date": cycle["cycle_end_date"],
+                "charges_total": summary["charges_total"],
+                "statement_balance": summary["statement_balance"],
+            })
+            if len(entries) >= months:
+                break
+        entries.reverse()
+        return entries
+
+    @staticmethod
     def sync_planned_payments(db: Session, card_id: int, user_id: int) -> bool:
         card = CreditCardService.get_card(db, card_id, user_id)
         if not card:

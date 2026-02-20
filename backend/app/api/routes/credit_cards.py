@@ -11,6 +11,7 @@ from app.schemas.credit_card import (
     CreditCardResponse,
     CreditCardInvoiceCycleResponse,
     CreditCardStatementResponse,
+    CreditCardInvoiceHistoryResponse,
 )
 from app.services.credit_card_service import CreditCardService
 
@@ -106,6 +107,24 @@ def get_statement_summary(
     if not summary:
         raise HTTPException(status_code=404, detail="Credit card not found")
     return summary
+
+
+@router.get("/{card_id}/invoice-history", response_model=CreditCardInvoiceHistoryResponse)
+def get_invoice_history(
+    card_id: int,
+    user_id: int,
+    months: int = 12,
+    db: Session = Depends(get_db),
+):
+    """Get invoice totals for the last N billing cycles (for charts)."""
+    entries = CreditCardService.get_invoice_history(db, card_id, user_id, months=months)
+    if entries is None:
+        raise HTTPException(status_code=404, detail="Credit card not found")
+    return {
+        "card_id": card_id,
+        "months": months,
+        "entries": entries,
+    }
 
 
 @router.post("/{card_id}/sync-planned-payments", status_code=204)

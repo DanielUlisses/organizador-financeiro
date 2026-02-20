@@ -11,6 +11,7 @@ class BankAccountBase(BaseModel):
     account_type: AccountType
     bank_name: Optional[str] = None
     account_number_last4: Optional[str] = None
+    color: Optional[str] = None
     currency: str = "USD"
 
 
@@ -23,6 +24,7 @@ class BankAccountUpdate(BaseModel):
     account_type: Optional[AccountType] = None
     bank_name: Optional[str] = None
     account_number_last4: Optional[str] = None
+    color: Optional[str] = None
     balance: Optional[Decimal] = None
     currency: Optional[str] = None
     is_active: Optional[bool] = None

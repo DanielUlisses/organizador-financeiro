@@ -26,6 +26,7 @@ class BankAccount(Base):
     account_number_last4 = Column(String(4), nullable=True)  # Last 4 digits for display
     balance = Column(Numeric(15, 2), default=0.00, nullable=False)
     currency = Column(String(3), default="USD", nullable=False)
+    color = Column(String(7), nullable=True)  # e.g. #6366F1
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

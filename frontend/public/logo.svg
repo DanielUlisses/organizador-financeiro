@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square - Material flat -->
+  <rect width="48" height="48" rx="10" fill="url(#bg)"/>
+  <!-- Dollar sign -->
+  <text x="12" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="26" font-weight="700" fill="white">$</text>
+  <!-- Bar chart - upward trend -->
+  <rect x="28" y="26" width="4" height="8" rx="2" fill="white" opacity=".88"/>
+  <rect x="34" y="22" width="4" height="12" rx="2" fill="white" opacity=".94"/>
+  <rect x="40" y="16" width="4" height="18" rx="2" fill="white"/>
+</svg>

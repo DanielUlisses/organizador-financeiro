@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Pencil, Trash2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Calendar, CalendarClock, CalendarRange, Pencil, Trash2 } from 'lucide-react'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { ChartCard } from '@/components/common/ChartCard'
 import { Button } from '@/components/ui/button'
@@ -823,18 +822,36 @@ export function InvestmentsPage() {
       {notice ? <p className="text-sm text-emerald-600">{notice}</p> : null}
 
       <ChartCard title="Total invested over time" subtitle="Select timeframe for cumulative invested principal">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">Investment account creation moved to Settings.</div>
-          <div className="flex items-center gap-2">
-            <select className="rounded-md border bg-background px-2 py-1 text-sm" value={investedRange} onChange={(e)=>setInvestedRange(e.target.value as 'all'|'5y'|'3y'|'1y'|'6m'|'3m')}>
-              <option value="all">All period</option>
-              <option value="5y">5 years</option>
-              <option value="3y">3 years</option>
-              <option value="1y">1 year</option>
-              <option value="6m">6 months</option>
-              <option value="3m">3 months</option>
-            </select>
-            <Link to="/investments/tax" className="text-sm text-primary underline underline-offset-4">Tax transactions page</Link>
+        <div className="mb-4 flex justify-end">
+          <div
+            className="inline-flex items-center gap-0.5 rounded-full border border-border bg-muted/30 p-1"
+            role="group"
+            aria-label="Time range"
+          >
+            {(
+              [
+                { value: 'all' as const, icon: CalendarRange },
+                { value: '5y' as const, icon: Calendar },
+                { value: '3y' as const, icon: Calendar },
+                { value: '1y' as const, icon: CalendarClock },
+                { value: '6m' as const, icon: CalendarClock },
+                { value: '3m' as const, icon: CalendarClock },
+              ] as const
+            ).map(({ value, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setInvestedRange(value)}
+                title={value === 'all' ? 'All period' : value === '5y' ? '5 years' : value === '3y' ? '3 years' : value === '1y' ? '1 year' : value === '6m' ? '6 months' : '3 months'}
+                className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                  investedRange === value
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
           </div>
         </div>
         <div className="h-72">

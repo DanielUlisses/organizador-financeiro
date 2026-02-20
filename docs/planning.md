@@ -83,34 +83,37 @@ Core goals:
 
 ## Phase 3: Credit Cards
 
-- [ ] Credit card statement/invoice by billing cycle
-- [ ] Invoice workflow:
+- [x] Credit card statement/invoice by billing cycle
+- [x] Invoice workflow:
   - Open/closed invoice cycle
   - Due date and payment status
   - Invoice summary totals
-- [ ] Credit card transaction management (create/update/delete)
-- [ ] Chart set focused on card usage, invoice evolution, and categories
-- [ ] Month/cycle navigation aligned with account and dashboard behavior
+- [x] Credit card transaction management (create/update/delete)
+- [x] Chart set focused on card usage, invoice evolution, and categories
+- [x] Month/cycle navigation aligned with account and dashboard behavior
 
 ## Phase 4: Investments
 
-- [ ] Asset tracking
-- [ ] Portfolio tracking
-- [ ] Investment transactions
-- [ ] Performance charts and indicators
-- [ ] Allocation and evolution visualizations
+- [x] Asset tracking
+- [x] Portfolio tracking
+- [x] Investment transactions
+- [x] Performance charts and indicators
+- [x] Allocation and evolution visualizations
 
 ## Phase 5: Settings and Profile
 
-- [ ] Settings:
+- [ ] Settings (navigable sections):
   - Currency
   - Transaction ordering (older/newer first)
-  - Account and credit card management
+  - Bank account management (create/list bank accounts)
+  - Credit card management
+  - Notification preferences (what to be notified about)
 - [ ] Profile page:
   - User information editing
   - Picture upload
   - Auto-crop workflow for profile image fitting
   - Visualize updated uploaded image files from external storage destination
+- [ ] Header notification center: working dropdown with notification items when user clicks icon
 
 ## Phase 6: Analytics and Custom Correlations
 

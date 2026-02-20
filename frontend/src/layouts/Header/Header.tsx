@@ -1,14 +1,13 @@
-import { Bell, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react'
+import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react'
 import { useTheme } from '@/app/providers/ThemeProvider'
 import { Button } from '@/components/ui/button'
+import { HeaderNotifications } from '@/layouts/Header/HeaderNotifications'
 
 type HeaderProps = {
   collapsed: boolean
   onOpenSidebar: () => void
   onToggleCollapsed: () => void
 }
-
-const INTERNAL_NOTIFICATIONS_COUNT = 4
 
 export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderProps) {
   const { theme, toggleTheme } = useTheme()
@@ -28,7 +27,19 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </Button>
-        <h1 className="text-sm font-semibold md:text-base">Organizador Financeiro</h1>
+        <h1 className="flex items-center gap-2">
+          <span className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg">
+            <img
+              src="/logo.svg"
+              alt=""
+              className="h-9 w-9 select-none object-contain object-center"
+              width={36}
+              height={36}
+              decoding="async"
+            />
+          </span>
+          <span className="sr-only">Organizador Financeiro</span>
+        </h1>
         <div className="ml-2 hidden w-72 items-center rounded-md border bg-card px-3 py-1.5 md:flex">
           <input
             type="text"
@@ -43,16 +54,7 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
 
-        <button
-          type="button"
-          className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border bg-card"
-          aria-label="Open notifications"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] text-white">
-            {INTERNAL_NOTIFICATIONS_COUNT}
-          </span>
-        </button>
+        <HeaderNotifications />
 
         <div className="flex items-center gap-2 rounded-md border bg-card px-2 py-1">
           <div className="hidden text-right text-xs leading-tight sm:block">

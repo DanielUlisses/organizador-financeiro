@@ -13,6 +13,7 @@ class CreditCard(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     issuer = Column(String, nullable=True)  # e.g., "Visa", "Mastercard", "American Express"
+    card_network = Column(String(20), nullable=True)  # 'visa' | 'mastercard' | 'amex' for branding/icon
     card_number_last4 = Column(String(4), nullable=True)  # Last 4 digits for display
     credit_limit = Column(Numeric(15, 2), nullable=False)
     current_balance = Column(Numeric(15, 2), default=0.00, nullable=False)

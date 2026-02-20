@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, Trash2 } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowUpDown, Check, Pencil, Trash2 } from 'lucide-react'
+import { Area, AreaChart, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
 import { MonthNavigator } from '@/components/common/MonthNavigator'
@@ -13,11 +13,37 @@ type CreditCard = {
   id: number
   name: string
   issuer?: string | null
+  card_network?: string | null
+  card_number_last4?: string | null
   current_balance: number
   credit_limit: number
   available_credit: number
   utilization_percentage: number
   default_payment_account_id?: number | null
+}
+
+function CardNetworkIcon({ network }: { network?: string | null }) {
+  const raw = (network ?? '').toLowerCase()
+  const n = raw.includes('visa') ? 'visa' : raw.includes('master') ? 'mastercard' : raw.includes('amex') || raw.includes('american') ? 'amex' : raw
+  if (n === 'visa')
+    return (
+      <svg viewBox="0 0 24 24" className="h-8 w-12" fill="currentColor" aria-hidden>
+        <path d="M9.112 8.262L2.012 15.75H0l2.512-7.488h2.6zm2.6 0l3.9 7.488h-2.65l-.65-1.638h-3.575l-.425 1.638H5.762l4.95-7.488zm8.475 0l2.6 7.488h-2.375l-1.625-4.213-1.3 4.213h-2.6l2.6-7.488h2.35l1.55 4.075z" />
+      </svg>
+    )
+  if (n === 'mastercard')
+    return (
+      <svg viewBox="0 0 24 24" className="h-8 w-10" fill="currentColor" aria-hidden>
+        <path d="M15.245 17.831h-6.49a5.42 5.42 0 0 1 2.06-4.166 5.417 5.417 0 0 1 6.37 0 5.42 5.42 0 0 1 2.06 4.166zm-3.245-6.669a3.735 3.735 0 0 0-3.24 1.875 3.735 3.735 0 0 0 0 3.588 3.735 3.735 0 0 0 3.24 1.875 3.735 3.735 0 0 0 3.24-1.875 3.735 3.735 0 0 0 0-3.588 3.735 3.735 0 0 0-3.24-1.875zM12 3C6.477 3 2 7.477 2 13s4.477 10 10 10 10-4.477 10-10S17.523 3 12 3z" />
+      </svg>
+    )
+  if (n === 'amex')
+    return (
+      <svg viewBox="0 0 24 24" className="h-7 w-10" fill="currentColor" aria-hidden>
+        <path d="M2 6h20v2.4l-1.2 1.6 1.2 1.6V14H2v-2.4l1.2-1.6L2 8.4V6zm0 10h20v2H2v-2zm3-6.5h2v1.5H5V9.5zm3 0h2v1.5H8V9.5zm5 0l2.5 2-2.5 2v-1.5h-2v-1h2V9.5z" />
+      </svg>
+    )
+  return <span className="text-[10px] font-bold opacity-80">CARD</span>
 }
 
 type StatementTransaction = {
@@ -103,6 +129,9 @@ export function CreditCardsPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(referenceDate)
   const [paymentDescription, setPaymentDescription] = useState('Credit card payment')
+  const [invoiceHistory, setInvoiceHistory] = useState<
+    Array<{ period_label: string; charges_total: number; statement_balance: number }>
+  >([])
 
   const selectedCard = useMemo(
     () => cards.find((card) => card.id === selectedCardId) ?? null,
@@ -116,6 +145,8 @@ export function CreditCardsPage() {
       id: number
       name: string
       issuer?: string
+      card_network?: string | null
+      card_number_last4?: string | null
       current_balance: unknown
       credit_limit: unknown
       available_credit: unknown
@@ -126,6 +157,8 @@ export function CreditCardsPage() {
       id: card.id,
       name: card.name,
       issuer: card.issuer,
+      card_network: card.card_network,
+      card_number_last4: card.card_number_last4,
       current_balance: Number(card.current_balance),
       credit_limit: Number(card.credit_limit),
       available_credit: Number(card.available_credit),
@@ -256,6 +289,23 @@ export function CreditCardsPage() {
     return () => window.removeEventListener('of:transactions-changed', handler)
   }, [selectedCardId])
 
+  const loadInvoiceHistory = useCallback(async (cardId: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/credit-cards/${cardId}/invoice-history?user_id=${USER_ID}&months=12`)
+      if (!res.ok) return
+      const data = (await res.json()) as { entries: Array<{ period_label: string; charges_total: number; statement_balance: number }> }
+      setInvoiceHistory(
+        data.entries.map((e) => ({
+          period_label: e.period_label,
+          charges_total: Number(e.charges_total),
+          statement_balance: Number(e.statement_balance),
+        })),
+      )
+    } catch {
+      setInvoiceHistory([])
+    }
+  }, [])
+
   useEffect(() => {
     if (!selectedCardId) return
     let active = true
@@ -272,6 +322,11 @@ export function CreditCardsPage() {
       active = false
     }
   }, [selectedCardId, referenceDate])
+
+  useEffect(() => {
+    if (selectedCardId) void loadInvoiceHistory(selectedCardId)
+    else setInvoiceHistory([])
+  }, [selectedCardId, loadInvoiceHistory])
 
   useEffect(() => {
     if (!selectedCard) return
@@ -322,6 +377,17 @@ export function CreditCardsPage() {
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, value]) => value)
   }, [summary])
+
+  const invoiceChartData = useMemo(() => {
+    if (invoiceHistory.length === 0) return []
+    const sum = invoiceHistory.reduce((acc, e) => acc + e.charges_total, 0)
+    const avg = sum / invoiceHistory.length
+    return invoiceHistory.map((e) => ({
+      period: e.period_label,
+      charges: e.charges_total,
+      average: Math.round(avg * 100) / 100,
+    }))
+  }, [invoiceHistory])
 
   const openEditModal = (item: StatementTransaction) => {
     const transactionType = getTransactionTypeFromBackendCategory(item.category)
@@ -561,65 +627,82 @@ export function CreditCardsPage() {
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <SectionHeader
           title="Credit Cards"
-          subtitle="Invoice-cycle statement with grouped lines, reconciliation, and recurring-aware edits/deletes"
-          actions={<MonthNavigator />}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor="card-select">
+                Card
+              </label>
+              <select
+                id="card-select"
+                value={selectedCardId ?? ''}
+                onChange={(event) => setSelectedCardId(Number(event.target.value))}
+                className="rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {card.name}
+                  </option>
+                ))}
+              </select>
+              <MonthNavigator />
+              <Button variant="outline" size="sm" onClick={() => void refreshData()}>
+                Refresh
+              </Button>
+            </div>
+          }
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border bg-card p-5 shadow-sm lg:col-span-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm font-medium" htmlFor="card-select">
-              Card
-            </label>
-            <select
-              id="card-select"
-              value={selectedCardId ?? ''}
-              onChange={(event) => setSelectedCardId(Number(event.target.value))}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              {cards.map((card) => (
-                <option key={card.id} value={card.id}>
-                  {card.name}
-                </option>
-              ))}
-            </select>
-            <label className="ml-4 text-sm font-medium" htmlFor="credit-sort-order">
-              Sort
-            </label>
-            <select
-              id="credit-sort-order"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value as 'older' | 'newer')}
-              className="rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              <option value="older">Older first</option>
-              <option value="newer">Newer first</option>
-            </select>
-            <Button variant="outline" onClick={() => void refreshData()}>
-              Refresh
-            </Button>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-xl overflow-hidden border border-border bg-card shadow-sm">
+          <div
+            className="relative flex min-h-[180px] flex-col justify-between rounded-t-xl p-5 text-white"
+            style={{
+              background: 'linear-gradient(145deg, #1a1a1a 0%, #0d0d0d 100%)',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <span className="text-sm font-semibold tracking-wide text-white/95">{selectedCard?.name ?? 'Credit card'}</span>
+              <div className="text-white/90">
+                <CardNetworkIcon network={selectedCard?.card_network ?? selectedCard?.issuer} />
+              </div>
+            </div>
+            <div className="flex items-end justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-wider text-white/70">Cardholder</p>
+                <p className="font-mono text-sm tracking-widest">**** **** **** {selectedCard?.card_number_last4 ?? '****'}</p>
+                <p className="text-xs text-white/60">
+                  EXP {summary?.close_date?.slice(5, 7) ?? '**'}/{summary?.due_date?.slice(2, 4) ?? '**'} · Available {currency.format(selectedCard?.available_credit ?? 0)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wider text-white/70">Statement balance</p>
+                <p className="text-2xl font-bold tracking-tight">{currency.format(summary?.statement_balance ?? selectedCard?.current_balance ?? 0)}</p>
+              </div>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {selectedCard
-              ? `${selectedCard.issuer ?? 'Card issuer'} • limit ${currency.format(selectedCard.credit_limit)} • utilization ${selectedCard.utilization_percentage.toFixed(1)}%`
-              : 'Select a credit card'}
-          </p>
-          {summary ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Cycle {summary.cycle_start_date} to {summary.cycle_end_date} • closes {summary.close_date} • due {summary.due_date}
-            </p>
-          ) : null}
         </div>
 
-        <div className="rounded-xl border bg-card p-5 shadow-sm">
-          <p className="text-xs uppercase text-muted-foreground">Current card balance</p>
-          <p className="mt-2 text-2xl font-semibold">{currency.format(selectedCard?.current_balance ?? 0)}</p>
-          <p className="mt-2 text-xs text-muted-foreground">Available: {currency.format(selectedCard?.available_credit ?? 0)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Statement balance: <span className="font-medium">{currency.format(summary?.statement_balance ?? 0)}</span>
-          </p>
-        </div>
+        <ChartCard title="Past 12 months invoices" subtitle="Charges per billing cycle with average line">
+          {invoiceChartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No invoice history for this card.</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={invoiceChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => currency.format(v)} />
+                  <Tooltip formatter={(value: number) => currency.format(value)} />
+                  <Legend />
+                  <Bar dataKey="charges" fill={CHART_THEME.series.balance} name="Charges" radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="average" stroke={CHART_THEME.series.expenses} strokeWidth={2} strokeDasharray="4 4" name="Average" dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartCard>
       </div>
 
       {loading ? <p className="text-sm text-muted-foreground">Loading credit card statement...</p> : null}
@@ -742,7 +825,23 @@ export function CreditCardsPage() {
         </div>
       </ChartCard>
 
-      <ChartCard title="Card statement (invoice cycle)" subtitle={`${summary?.transactions.length ?? 0} transactions in cycle`}>
+      <ChartCard
+        title="Card statement (invoice cycle)"
+        subtitle={`${summary?.transactions.length ?? 0} transactions in cycle`}
+        titleAction={
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Sort</span>
+            <button
+              type="button"
+              onClick={() => setSortOrder((o) => (o === 'older' ? 'newer' : 'older'))}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background hover:bg-muted"
+              aria-label={sortOrder === 'older' ? 'Newer first' : 'Older first'}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+            </button>
+          </div>
+        }
+      >
         {groupedStatement.length === 0 ? (
           <p className="text-sm text-muted-foreground">No transactions available for selected cycle.</p>
         ) : (
