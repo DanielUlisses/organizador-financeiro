@@ -47,7 +47,7 @@ python scripts/meu_dinheiro/combine_meu_dinheiro_csv.py \
 ```
 
 - Os dois arquivos podem ter estruturas ligeiramente diferentes (ex.: um com coluna "Venc. Fatura", outro sem).
-- Em duplicatas (mesmo "ID Único"), é mantida a linha do **último** arquivo (o que costuma ter Transferência/Pagamento corretos).
+- Em duplicatas (mesmo "ID Único"), é mantida a linha do **último** arquivo (Tipo, Status, datas, valor etc.), mas **Conta** e **Conta transferência** vêm do **primeiro** arquivo onde o ID apareceu. Assim um export parcial (ex.: só Nomad ou só transferências) não sobrescreve a conta correta. Use `--no-preserve-conta` para desativar e voltar ao comportamento "último arquivo em tudo".
 - A saída tem 2.361 transações únicas (exemplo: 2.030 + 790 − 459 duplicatas).
 
 Use depois `MEU_DINHEIRO_CSV=/caminho/Meu_Dinheiro_combined.csv` nos passos de contas e importação.
@@ -198,6 +198,21 @@ python scripts/meu_dinheiro/recalculate_bank_balances.py --user-id 1
 python scripts/meu_dinheiro/recalculate_bank_balances.py --user-id 1 --dry-run
 ```
 
+## Compra dolar duplicada (BRL + USD)
+
+Alguns exports trazem a mesma "Compra dolar" duas vezes: um valor em BRL e outro em USD (razão ~4,8–5). Isso duplica a saída na conta e distorce o saldo (ex.: Inter fev/2024 deveria fechar 13,05 mas fechava -1892,62).
+
+- **No import**: o script `import_transactions.py` detecta pares (mesma data, mesma conta, descrição "compra dolar", dois valores com razão entre 4,3 e 5,5) e **ignora a linha com valor menor** (USD).
+- **Já importou**: use o script abaixo para remover do banco os pagamentos duplicados (valor menor) e depois recalcule os saldos:
+
+```bash
+cd backend
+python scripts/meu_dinheiro/remove_compra_dolar_duplicates.py --user-id 1
+# opcional: --dry-run para só listar o que seria removido
+
+python scripts/meu_dinheiro/recalculate_bank_balances.py --user-id 1
+```
+
 ## Arquivar contas de investimento (pós-import)
 
 Após validar os saldos, arquive contas de investimento sem apagar histórico/transações:
@@ -250,8 +265,8 @@ python scripts/meu_dinheiro/archive_investment_accounts.py --user-id 1
 - **combine_meu_dinheiro_csv.py**: combina dois ou mais CSVs e deduplica por "ID Único" (mantém a linha do último arquivo em duplicatas). Saída no formato de 16 colunas.
 - **create_accounts.py**: cria `bank_accounts` e `credit_cards` a partir de **Conta** e **Conta transferência** do CSV.
 - **create_categories.py**: cria/atualiza `transaction_categories` a partir do CSV, definindo cor e ícone por categoria.
-- **import_transactions.py**: cria `payments` (ONE_TIME) e `payment_occurrences`. "Saldo inicial" vira receita na conta na data efetiva. Em "Transferência"/"Pagamento", a direção é definida pelo sinal de `Valor efetivo` na conta da linha (valor positivo = entrada na conta da linha; valor negativo = saída). Deduplicação por `ID Único` quando disponível. Quando houver categoria correspondente criada, o `category_id` é preenchido.
-  O script também deduplica transferências espelhadas (quando o CSV traz o mesmo evento em duas linhas com IDs diferentes: uma negativa na origem e outra positiva no destino).
+- **import_transactions.py**: cria `payments` (ONE_TIME) e `payment_occurrences`. "Saldo inicial" vira receita na conta na data efetiva. Em "Transferência"/"Pagamento", a direção é definida pelo sinal de `Valor efetivo` na conta da linha (valor positivo = entrada na conta da linha; valor negativo = saída). Deduplicação por `ID Único` quando disponível. Deduplicação de "Compra dolar" duplicada (BRL+USD): ignora a linha com valor menor quando há par com razão ~4,8–5. Deduplica transferências espelhadas. Vincula `category_id` quando a categoria existe.
+- **remove_compra_dolar_duplicates.py**: remove do banco pagamentos "Compra dolar" que são o valor menor de um par BRL/USD (razão 4,3–5,5), para corrigir saldos já importados.
 - **recalculate_bank_balances.py**: recalcula `bank_accounts.balance` a partir dos `payments` efetivados (`RECONCILED`/`PROCESSED`).
 - **archive_investment_accounts.py**: marca `bank_accounts.is_active=false` para contas de investimento importadas (mantém histórico, oculta da UI operacional).
 

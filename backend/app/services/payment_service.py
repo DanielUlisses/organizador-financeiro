@@ -53,7 +53,7 @@ class PaymentService:
         if status:
             query = query.filter(Payment.status == status)
         
-        return query.order_by(Payment.created_at.desc()).offset(skip).limit(limit).all()
+        return query.order_by(Payment.created_at.desc(), Payment.id.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
     def create_one_time_payment(

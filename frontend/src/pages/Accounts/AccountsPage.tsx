@@ -156,7 +156,12 @@ export function AccountsPage() {
       skip += pageSize
     }
 
-    return all
+    // Defensive dedupe in case backend pagination order changes.
+    const byId = new Map<number, (typeof all)[number]>()
+    for (const payment of all) {
+      byId.set(payment.id, payment)
+    }
+    return [...byId.values()]
   }
 
   const loadData = async () => {

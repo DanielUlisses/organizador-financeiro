@@ -9,6 +9,7 @@ Todas importadas como ONE_TIME (repetição do CSV ignorada para transações pa
   Ex.: valor positivo em "3 Inter" significa entrada em "3 Inter" (origem = conta_transferencia).
 - Deduplicação por ID Único (quando disponível).
 - Deduplicação semântica adicional para transferências espelhadas (mesmo evento em duas linhas com IDs diferentes).
+- Compra dolar: quando a mesma data/conta tem duas linhas com descrição "compra dolar" e valores com razão ~4,8–5 (BRL + USD), ignora a linha com valor menor (USD) para não duplicar.
 - Vincula category_id quando a categoria (nome + tipo) já existe em transaction_categories.
 
 Rodar após create_accounts.py (contas e cartões já criados).
@@ -221,6 +222,59 @@ def _converter_brl_para_usd(valor_brl: Decimal, taxa_brl_usd: Decimal) -> Decima
     return (valor_brl / taxa_brl_usd).quantize(Decimal("0.01"))
 
 
+COMPRA_DOLAR_RATIO_MIN = Decimal("4.3")
+COMPRA_DOLAR_RATIO_MAX = Decimal("5.5")
+
+
+def _is_compra_dolar_description(desc: str) -> bool:
+    d = (desc or "").strip().casefold()
+    return "compra" in d and ("dolar" in d or "dólar" in d)
+
+
+def _build_compra_dolar_skip_set(
+    rows: list[dict],
+    usar_previsto_quando_sem_efetivo: bool,
+) -> set[tuple[Date | None, str, Decimal]]:
+    """
+    Encontra linhas 'compra dolar' duplicadas (BRL + USD): mesma conta, mesma data,
+    dois valores com razão ~4,8–5. Retorna set (data, conta, amount) do valor menor (USD)
+    para ignorar na importação.
+    """
+    from collections import defaultdict
+
+    groups: dict[tuple[Date | None, str], list[Decimal]] = defaultdict(list)
+
+    for row in rows:
+        desc = (row.get("descricao") or "").strip()
+        if not _is_compra_dolar_description(desc):
+            continue
+        data_lancamento, signed_amount = _valor_data_lancamento(
+            row, usar_previsto_quando_sem_efetivo
+        )
+        if signed_amount is None or signed_amount >= 0:
+            continue
+        conta = (row.get("conta") or "").strip()
+        if not conta:
+            continue
+        amount = abs(Decimal(str(signed_amount)))
+        if amount == 0:
+            continue
+        groups[(data_lancamento, conta)].append(amount)
+
+    skip_set: set[tuple[Date | None, str, Decimal]] = set()
+    for (data, conta), amounts in groups.items():
+        if len(amounts) < 2:
+            continue
+        big = max(amounts)
+        small = min(amounts)
+        if big <= 0:
+            continue
+        ratio = big / small
+        if COMPRA_DOLAR_RATIO_MIN <= ratio <= COMPRA_DOLAR_RATIO_MAX:
+            skip_set.add((data, conta, small))
+    return skip_set
+
+
 def importar_transacoes(
     caminho_csv: str | Path,
     user_id: int,
@@ -267,6 +321,12 @@ def importar_transacoes(
             usar_previsto_quando_sem_efetivo=usar_previsto_quando_sem_efetivo,
         )
         print(f"Taxa BRL->USD aplicada para Nomad: {taxa_brl_usd_nomad}")
+
+        compra_dolar_skip_set = _build_compra_dolar_skip_set(
+            rows, usar_previsto_quando_sem_efetivo=usar_previsto_quando_sem_efetivo
+        )
+        if compra_dolar_skip_set:
+            print(f"Compra dolar: ignorando {len(compra_dolar_skip_set)} linha(s) duplicada(s) (valor USD)")
 
         def _criar_payment_occurrence(
             *,
@@ -347,6 +407,10 @@ def importar_transacoes(
             signed_amount = Decimal(str(valor_lancamento)) if valor_lancamento is not None else Decimal("0")
             amount = abs(signed_amount)
             if amount == 0:
+                ignorados += 1
+                continue
+
+            if (data_lancamento, conta, amount) in compra_dolar_skip_set:
                 ignorados += 1
                 continue
 

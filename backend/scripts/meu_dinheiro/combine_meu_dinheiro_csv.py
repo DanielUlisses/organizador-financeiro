@@ -44,14 +44,21 @@ def combine_csvs(
     caminhos: list[str | Path],
     saida: str | Path | None = None,
     preferir_ultimo: bool = True,
+    preservar_conta_do_primeiro: bool = True,
 ) -> tuple[int, int]:
     """
     Combina os CSVs, deduplicando por "ID Único". Quando há duplicata, mantém
     a linha do último arquivo na lista (preferir_ultimo=True).
 
+    Se preservar_conta_do_primeiro=True, para cada ID mantido usa "Conta" e
+    "Conta transferência" da **primeira** ocorrência do ID (primeiro arquivo
+    onde o ID apareceu). Isso evita que um export parcial (ex.: só Nomad ou só
+    transferências) sobrescreva a conta correta (ex.: "1 Sicoob" -> "3 Inter").
+
     Retorna (total_linhas_escritas, total_ids_unicos).
     """
     id_para_linha: dict[str, dict] = {}
+    id_para_primeira_conta: dict[str, tuple[str, str]] = {}
 
     for caminho in caminhos:
         path = Path(caminho)
@@ -63,7 +70,11 @@ def combine_csvs(
                 uid = (row.get("ID Único") or "").strip()
                 if not uid:
                     continue
-                # Sobrescreve com a linha deste arquivo (assim o último arquivo ganha nas duplicatas)
+                if uid not in id_para_primeira_conta:
+                    conta = (row.get("Conta") or "").strip()
+                    conta_transf = (row.get("Conta transferência") or "").strip()
+                    id_para_primeira_conta[uid] = (conta, conta_transf)
+                # Sobrescreve com a linha deste arquivo (último arquivo ganha nos demais campos)
                 id_para_linha[uid] = row
 
     total = len(id_para_linha)
@@ -71,8 +82,15 @@ def combine_csvs(
     try:
         writer = csv.writer(out_file)
         writer.writerow(OUTPUT_HEADER)
-        for row in id_para_linha.values():
-            writer.writerow(_row_to_output(row))
+        for uid, row in id_para_linha.items():
+            out_row = dict(row)
+            if preservar_conta_do_primeiro and uid in id_para_primeira_conta:
+                primeira_conta, primeira_conta_transf = id_para_primeira_conta[uid]
+                if primeira_conta:
+                    out_row["Conta"] = primeira_conta
+                if primeira_conta_transf:
+                    out_row["Conta transferência"] = primeira_conta_transf
+            writer.writerow(_row_to_output(out_row))
     finally:
         if saida and out_file is not sys.stdout:
             out_file.close()
@@ -87,6 +105,11 @@ def main() -> int:
     )
     p.add_argument("csvs", nargs="+", help="Dois ou mais arquivos CSV (o último prevalece em IDs duplicados)")
     p.add_argument("-o", "--output", default="", help="Arquivo de saída (se omitido, imprime na stdout)")
+    p.add_argument(
+        "--no-preserve-conta",
+        action="store_true",
+        help="Desativa: por padrão Conta/Conta transferência vêm do primeiro arquivo onde o ID aparece (evita 3 Inter engolir 1 Sicoob)",
+    )
     args = p.parse_args()
 
     if len(args.csvs) < 2:
@@ -94,7 +117,11 @@ def main() -> int:
         return 1
 
     try:
-        n, _ = combine_csvs(args.csvs, saida=args.output or None)
+        n, _ = combine_csvs(
+            args.csvs,
+            saida=args.output or None,
+            preservar_conta_do_primeiro=not args.no_preserve_conta,
+        )
         if args.output:
             print(f"Escritas {n} transações únicas em {args.output}", file=sys.stderr)
         return 0
