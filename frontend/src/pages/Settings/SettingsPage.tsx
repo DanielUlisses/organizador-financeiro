@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,7 +19,18 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const USER_ID = 1
 
+const SECTION_LABEL_KEYS: Record<SettingsSectionId, string> = {
+  general: 'settings.general',
+  'bank-accounts': 'settings.bankAccounts',
+  'credit-cards': 'settings.creditCards',
+  categories: 'settings.categories',
+  tags: 'settings.tags',
+  'investment-accounts': 'settings.investmentAccounts',
+  notifications: 'settings.notifications',
+}
+
 export function SettingsPage() {
+  const { t } = useTranslation()
   const [currentSection, setCurrentSection] = useState<SettingsSectionId>('general')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +77,16 @@ export function SettingsPage() {
     }>
   >([])
   const [investmentAccounts, setInvestmentAccounts] = useState<
-    Array<{ id: number; name: string; account_type: string; broker_name?: string | null; current_value: number }>
+    Array<{
+      id: number
+      name: string
+      account_type: string
+      broker_name?: string | null
+      account_number_last4?: string | null
+      current_value: number
+      currency?: string
+      is_active?: boolean
+    }>
   >([])
 
   const [newCategory, setNewCategory] = useState({
@@ -130,6 +151,15 @@ export function SettingsPage() {
     default_payment_account_id: '',
     currency: 'USD',
   })
+  const [editingInvestmentId, setEditingInvestmentId] = useState<number | null>(null)
+  const [editInvestmentForm, setEditInvestmentForm] = useState({
+    name: '',
+    account_type: 'brokerage',
+    broker_name: '',
+    account_number_last4: '',
+    current_value: '0',
+    currency: 'BRL',
+  })
 
   const groupedCategories = useMemo(
     () => ({
@@ -152,7 +182,7 @@ export function SettingsPage() {
         fetch(`${API_BASE_URL}/investment-accounts?user_id=${USER_ID}&limit=200`),
       ])
       if (!categoriesRes.ok || !tagsRes.ok || !accountsRes.ok || !cardsRes.ok || !investmentAccountsRes.ok) {
-        throw new Error('Failed to load settings data.')
+        throw new Error(t('settings.failedLoadSettings'))
       }
       const rawCategories = (await categoriesRes.json()) as Array<{
         id: number
@@ -194,7 +224,10 @@ export function SettingsPage() {
         name: string
         account_type: string
         broker_name?: string | null
-        current_value: number
+        account_number_last4?: string | null
+        current_value: number | string
+        currency?: string
+        is_active?: boolean
       }>
       setCategories(rawCategories)
       setTags(rawTags)
@@ -211,9 +244,14 @@ export function SettingsPage() {
           current_balance: typeof c.current_balance === 'string' ? Number(c.current_balance) || 0 : c.current_balance,
         })),
       )
-      setInvestmentAccounts(rawInvestmentAccounts)
+      setInvestmentAccounts(
+        rawInvestmentAccounts.map((a) => ({
+          ...a,
+          current_value: typeof a.current_value === 'string' ? Number(a.current_value) || 0 : a.current_value,
+        })),
+      )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      setError(err instanceof Error ? err.message : t('common.unknownError'))
     } finally {
       setLoading(false)
     }
@@ -248,11 +286,11 @@ export function SettingsPage() {
         budget_scope: 'all_months',
         budget_month: '',
       })
-      setNotice('Category created.')
+      setNotice(t('settings.categoryCreated'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create category failed.')
+      setError(err instanceof Error ? err.message : t('settings.createCategoryFailed'))
     }
   }
 
@@ -267,11 +305,11 @@ export function SettingsPage() {
       })
       if (!response.ok) throw new Error('Failed to create tag.')
       setNewTag({ name: '', color: '#8B5CF6' })
-      setNotice('Tag created.')
+      setNotice(t('settings.tagCreated'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create tag failed.')
+      setError(err instanceof Error ? err.message : t('settings.createTagFailed'))
     }
   }
 
@@ -308,11 +346,11 @@ export function SettingsPage() {
         default_payment_account_id: '',
         currency: 'USD',
       })
-      setNotice('Credit card created with planned future payments.')
+      setNotice(t('settings.creditCardCreated'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create credit card failed.')
+      setError(err instanceof Error ? err.message : t('settings.createCreditCardFailed'))
     }
   }
 
@@ -333,11 +371,11 @@ export function SettingsPage() {
       })
       if (!response.ok) throw new Error('Failed to create investment account.')
       setNewInvestmentAccount({ name: '', account_type: 'brokerage', broker_name: '', current_value: '0' })
-      setNotice('Investment account created.')
+      setNotice(t('settings.investmentAccountCreated'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create investment account failed.')
+      setError(err instanceof Error ? err.message : t('settings.createInvestmentAccountFailed'))
     }
   }
 
@@ -368,11 +406,11 @@ export function SettingsPage() {
         currency: 'USD',
         color: '#6366F1',
       })
-      setNotice('Bank account created.')
+      setNotice(t('settings.bankAccountCreated'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create bank account failed.')
+      setError(err instanceof Error ? err.message : t('settings.createBankAccountFailed'))
     }
   }
 
@@ -389,11 +427,11 @@ export function SettingsPage() {
         body: JSON.stringify({ is_active: false }),
       })
       if (!res.ok) throw new Error('Failed to archive.')
-      setNotice('Bank account archived.')
+      setNotice(t('settings.bankAccountArchived'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Archive failed.')
+      setError(e instanceof Error ? e.message : t('settings.archiveFailed'))
     }
   }
 
@@ -405,11 +443,11 @@ export function SettingsPage() {
         body: JSON.stringify({ is_active: false }),
       })
       if (!res.ok) throw new Error('Failed to archive.')
-      setNotice('Credit card archived.')
+      setNotice(t('settings.creditCardArchived'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Archive failed.')
+      setError(e instanceof Error ? e.message : t('settings.archiveFailed'))
     }
   }
 
@@ -421,11 +459,11 @@ export function SettingsPage() {
         body: JSON.stringify({ is_active: true }),
       })
       if (!res.ok) throw new Error('Failed to restore.')
-      setNotice('Bank account restored.')
+      setNotice(t('settings.bankAccountRestored'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Restore failed.')
+      setError(e instanceof Error ? e.message : t('settings.restoreFailed'))
     }
   }
 
@@ -437,11 +475,82 @@ export function SettingsPage() {
         body: JSON.stringify({ is_active: true }),
       })
       if (!res.ok) throw new Error('Failed to restore.')
-      setNotice('Credit card restored.')
+      setNotice(t('settings.creditCardRestored'))
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Restore failed.')
+      setError(e instanceof Error ? e.message : t('settings.restoreFailed'))
+    }
+  }
+
+  const archiveInvestmentAccount = async (id: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/investment-accounts/${id}?user_id=${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: false }),
+      })
+      if (!res.ok) throw new Error('Failed to archive.')
+      setNotice(t('settings.investmentAccountArchived'))
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('settings.archiveFailed'))
+    }
+  }
+
+  const restoreInvestmentAccount = async (id: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/investment-accounts/${id}?user_id=${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true }),
+      })
+      if (!res.ok) throw new Error('Failed to restore.')
+      setNotice(t('settings.investmentAccountRestored'))
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('settings.restoreFailed'))
+    }
+  }
+
+  const openEditInvestmentModal = (account: (typeof investmentAccounts)[0]) => {
+    setEditingInvestmentId(account.id)
+    setEditInvestmentForm({
+      name: account.name ?? '',
+      account_type: account.account_type ?? 'brokerage',
+      broker_name: account.broker_name ?? '',
+      account_number_last4: account.account_number_last4 ?? '',
+      current_value: String(account.current_value ?? 0),
+      currency: account.currency ?? 'BRL',
+    })
+  }
+
+  const saveEditInvestment = async () => {
+    if (editingInvestmentId == null) return
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await fetch(`${API_BASE_URL}/investment-accounts/${editingInvestmentId}?user_id=${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editInvestmentForm.name,
+          account_type: editInvestmentForm.account_type,
+          broker_name: editInvestmentForm.broker_name || null,
+          account_number_last4: editInvestmentForm.account_number_last4 || null,
+          current_value: Number(editInvestmentForm.current_value),
+          currency: editInvestmentForm.currency || 'BRL',
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to update.')
+      setNotice(t('settings.investmentAccountUpdated'))
+      setEditingInvestmentId(null)
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('settings.updateFailed'))
     }
   }
 
@@ -480,12 +589,12 @@ export function SettingsPage() {
         }),
       })
       if (!res.ok) throw new Error('Failed to update.')
-      setNotice('Bank account updated.')
+      setNotice(t('settings.bankAccountUpdated'))
       setEditingBankId(null)
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed.')
+      setError(e instanceof Error ? e.message : t('settings.updateFailed'))
     }
   }
 
@@ -530,12 +639,12 @@ export function SettingsPage() {
         }),
       })
       if (!res.ok) throw new Error('Failed to update.')
-      setNotice('Credit card updated.')
+      setNotice(t('settings.creditCardUpdated'))
       setEditingCardId(null)
       await loadData()
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed.')
+      setError(e instanceof Error ? e.message : t('settings.updateFailed'))
     }
   }
 
@@ -558,7 +667,7 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       <nav className="flex shrink-0 flex-row flex-wrap gap-1 border-b pb-4 md:w-52 md:flex-col md:border-b-0 md:border-r md:pb-0 md:pr-4">
-        {SETTINGS_SECTIONS.map(({ id, label }) => (
+        {SETTINGS_SECTIONS.map(({ id }) => (
           <button
             key={id}
             type="button"
@@ -569,44 +678,44 @@ export function SettingsPage() {
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
           >
-            {label}
+            {t(SECTION_LABEL_KEYS[id])}
           </button>
         ))}
       </nav>
       <main className="min-w-0 flex-1 space-y-6">
         <div className="rounded-xl border bg-card p-5 shadow-sm">
           <SectionHeader
-            title="Settings"
+            title={t('settings.title')}
             subtitle={
               currentSection === 'general'
-                ? 'Currency, transaction order, and app preferences.'
+                ? t('settings.subtitleGeneral')
                 : currentSection === 'bank-accounts'
-                  ? 'Create and manage bank accounts.'
+                  ? t('settings.subtitleBankAccounts')
                   : currentSection === 'credit-cards'
-                    ? 'Create and manage credit cards.'
+                    ? t('settings.subtitleCreditCards')
                     : currentSection === 'categories'
-                      ? 'Categories used by charts and statements.'
+                      ? t('settings.subtitleCategories')
                       : currentSection === 'tags'
-                        ? 'Tags for transactions.'
+                        ? t('settings.subtitleTags')
                         : currentSection === 'investment-accounts'
-                          ? 'Investment accounts.'
+                          ? t('settings.subtitleInvestmentAccounts')
                           : currentSection === 'notifications'
-                            ? 'Choose what you want to be notified about.'
+                            ? t('settings.subtitleNotifications')
                             : undefined
             }
           />
         </div>
 
-        {loading ? <p className="text-sm text-muted-foreground">Loading settings...</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">{t('settings.loading')}</p> : null}
         {error ? <p className="text-sm text-red-500">{error}</p> : null}
         {notice ? <p className="text-sm text-emerald-600">{notice}</p> : null}
 
         {currentSection === 'general' && (
           <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <h3 className="text-base font-semibold">General</h3>
+            <h3 className="text-base font-semibold">{t('settings.general')}</h3>
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="text-sm">
-                Default currency
+                {t('common.defaultCurrency')}
                 <select
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={defaultCurrency}
@@ -623,7 +732,7 @@ export function SettingsPage() {
                 </select>
               </label>
               <label className="text-sm">
-                Transaction order
+                {t('common.transactionOrder')}
                 <select
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={transactionOrder}
@@ -633,8 +742,8 @@ export function SettingsPage() {
                     setTransactionOrderState(v)
                   }}
                 >
-                  <option value="older">Older first</option>
-                  <option value="newer">Newer first</option>
+                  <option value="older">{t('common.olderFirstLabel')}</option>
+                  <option value="newer">{t('common.newerFirstLabel')}</option>
                 </select>
               </label>
             </div>
@@ -644,10 +753,10 @@ export function SettingsPage() {
         {currentSection === 'bank-accounts' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="text-base font-semibold">Create bank account</h3>
+              <h3 className="text-base font-semibold">{t('settings.createBankAccount')}</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="text-sm sm:col-span-2">
-                  Name
+                  {t('common.name')}
                   <input
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     value={newBankAccount.name}
@@ -655,7 +764,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="text-sm">
-                  Type
+                  {t('settings.type')}
                   <select
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     value={newBankAccount.account_type}
@@ -663,14 +772,14 @@ export function SettingsPage() {
                       setNewBankAccount((c) => ({ ...c, account_type: e.target.value as 'checking' | 'savings' | 'money_market' | 'other' }))
                     }
                   >
-                    <option value="checking">Checking</option>
-                    <option value="savings">Savings</option>
-                    <option value="money_market">Money market</option>
-                    <option value="other">Other</option>
+                    <option value="checking">{t('settings.accountTypeChecking')}</option>
+                    <option value="savings">{t('settings.accountTypeSavings')}</option>
+                    <option value="money_market">{t('settings.accountTypeMoneyMarket')}</option>
+                    <option value="other">{t('settings.accountTypeOther')}</option>
                   </select>
                 </label>
                 <label className="text-sm">
-                  Bank name
+                  {t('settings.bankName')}
                   <input
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     value={newBankAccount.bank_name}
@@ -678,7 +787,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="text-sm">
-                  Last 4 digits
+                  {t('settings.last4Digits')}
                   <input
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     value={newBankAccount.account_number_last4}
@@ -686,7 +795,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="text-sm">
-                  Initial balance
+                  {t('settings.initialBalance')}
                   <input
                     type="number"
                     step="0.01"
@@ -696,7 +805,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="text-sm">
-                  Currency
+                  {t('common.currency')}
                   <input
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     value={newBankAccount.currency}
@@ -704,7 +813,7 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="text-sm">
-                  Color
+                  {t('settings.color')}
                   <div className="mt-1 flex items-center gap-2">
                     <input
                       type="color"
@@ -721,29 +830,29 @@ export function SettingsPage() {
                 </label>
               </div>
               <div className="mt-4 flex justify-end">
-                <Button onClick={() => void createBankAccount()}>Create bank account</Button>
+                <Button onClick={() => void createBankAccount()}>{t('settings.createBankAccount')}</Button>
               </div>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="mb-3 text-base font-semibold">Bank accounts</h3>
+              <h3 className="mb-3 text-base font-semibold">{t('settings.bankAccountsList')}</h3>
               <div className="space-y-2">
                 {bankAccounts.map((account) => (
                   <div key={account.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
                     <div>
                       <p className="font-medium">{account.name}</p>
-                      {account.is_active === false && <span className="text-xs text-muted-foreground">Archived</span>}
+                      {account.is_active === false && <span className="text-xs text-muted-foreground">{t('settings.archived')}</span>}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => openEditBankModal(account)} aria-label="Edit">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => openEditBankModal(account)} aria-label={t('settings.editAriaLabel')}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       {account.is_active !== false ? (
                         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void archiveBankAccount(account.id)}>
-                          Archive
+                          {t('common.archive')}
                         </Button>
                       ) : (
                         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void restoreBankAccount(account.id)}>
-                          Restore
+                          {t('common.restore')}
                         </Button>
                       )}
                     </div>
@@ -757,10 +866,10 @@ export function SettingsPage() {
         {currentSection === 'credit-cards' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="text-base font-semibold">Create credit card</h3>
+              <h3 className="text-base font-semibold">{t('settings.createCreditCard')}</h3>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              Name
+              {t('common.name')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCard.name}
@@ -768,7 +877,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Issuer
+              {t('settings.issuer')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCard.issuer}
@@ -776,7 +885,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Card network
+              {t('settings.cardNetwork')}
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCard.card_network}
@@ -789,7 +898,7 @@ export function SettingsPage() {
               </select>
             </label>
             <label className="text-sm">
-              Last 4
+              {t('settings.last4')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCard.card_number_last4}
@@ -797,7 +906,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Credit limit
+              {t('settings.creditLimit')}
               <input
                 type="number"
                 step="0.01"
@@ -807,7 +916,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Current balance
+              {t('settings.currentBalance')}
               <input
                 type="number"
                 step="0.01"
@@ -817,7 +926,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Invoice close day
+              {t('settings.invoiceCloseDay')}
               <input
                 type="number"
                 min="1"
@@ -828,7 +937,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Due days after close
+              {t('settings.dueDaysAfterClose')}
               <input
                 type="number"
                 min="1"
@@ -839,13 +948,13 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Default payment account
+              {t('settings.defaultPaymentAccount')}
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCard.default_payment_account_id}
                 onChange={(event) => setNewCard((current) => ({ ...current, default_payment_account_id: event.target.value }))}
               >
-                <option value="">Default checking (automatic)</option>
+                <option value="">{t('settings.defaultCheckingAutomatic')}</option>
                 {bankAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -855,33 +964,32 @@ export function SettingsPage() {
             </label>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button onClick={() => void createCreditCard()}>Create credit card</Button>
+            <Button onClick={() => void createCreditCard()}>{t('settings.createCreditCard')}</Button>
           </div>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="mb-3 text-base font-semibold">Credit cards</h3>
+              <h3 className="mb-3 text-base font-semibold">{t('settings.creditCardsList')}</h3>
               <div className="space-y-2">
                 {creditCards.map((card) => (
                   <div key={card.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
                     <div>
                       <p className="font-medium">{card.name}</p>
                       <p className="text-muted-foreground">
-                        limit {card.credit_limit} • balance {card.current_balance} • payment account{' '}
-                        {bankAccounts.find((account) => account.id === card.default_payment_account_id)?.name ?? 'auto-checking'}
+                        {t('settings.limitBalancePaymentAccount', { limit: card.credit_limit, balance: card.current_balance, account: bankAccounts.find((account) => account.id === card.default_payment_account_id)?.name ?? t('settings.autoChecking') })}
                       </p>
-                      {card.is_active === false && <span className="text-xs text-muted-foreground">Archived</span>}
+                      {card.is_active === false && <span className="text-xs text-muted-foreground">{t('settings.archived')}</span>}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => openEditCardModal(card)} aria-label="Edit">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => openEditCardModal(card)} aria-label={t('settings.editAriaLabel')}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       {card.is_active !== false ? (
                         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void archiveCreditCard(card.id)}>
-                          Archive
+                          {t('common.archive')}
                         </Button>
                       ) : (
                         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void restoreCreditCard(card.id)}>
-                          Restore
+                          {t('common.restore')}
                         </Button>
                       )}
                     </div>
@@ -895,10 +1003,10 @@ export function SettingsPage() {
         {currentSection === 'categories' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="text-base font-semibold">Create category</h3>
+              <h3 className="text-base font-semibold">{t('settings.createCategory')}</h3>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              Type
+              {t('settings.type')}
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCategory.transaction_type}
@@ -906,13 +1014,13 @@ export function SettingsPage() {
                   setNewCategory((current) => ({ ...current, transaction_type: event.target.value as 'expense' | 'income' | 'transfer' }))
                 }
               >
-                <option value="expense">expense</option>
-                <option value="income">income</option>
-                <option value="transfer">transfer</option>
+                <option value="expense">{t('settings.expense')}</option>
+                <option value="income">{t('settings.income')}</option>
+                <option value="transfer">{t('settings.transfer')}</option>
               </select>
             </label>
             <label className="text-sm">
-              Name
+              {t('common.name')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCategory.name}
@@ -920,7 +1028,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Color
+              {t('settings.color')}
               <input
                 type="color"
                 className="mt-1 h-10 w-full rounded-md border bg-background px-2"
@@ -929,7 +1037,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Budget
+              {t('settings.budget')}
               <input
                 type="number"
                 step="0.01"
@@ -939,7 +1047,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Budget scope
+              {t('settings.budgetScope')}
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newCategory.budget_scope}
@@ -947,12 +1055,12 @@ export function SettingsPage() {
                   setNewCategory((current) => ({ ...current, budget_scope: event.target.value as 'all_months' | 'current_month' }))
                 }
               >
-                <option value="all_months">all_months</option>
-                <option value="current_month">current_month</option>
+                <option value="all_months">{t('settings.allMonthsLabel')}</option>
+                <option value="current_month">{t('settings.currentMonthScope')}</option>
               </select>
             </label>
             <label className="text-sm">
-              Budget month
+              {t('settings.budgetMonth')}
               <input
                 type="date"
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
@@ -963,14 +1071,14 @@ export function SettingsPage() {
             </label>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button onClick={() => void createCategory()}>Create category</Button>
+            <Button onClick={() => void createCategory()}>{t('settings.createCategory')}</Button>
           </div>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="mb-3 text-base font-semibold">Categories</h3>
+              <h3 className="mb-3 text-base font-semibold">{t('settings.categoriesList')}</h3>
               {(['expense', 'income', 'transfer'] as const).map((type) => (
                 <div key={type} className="mb-4">
-                  <p className="mb-2 text-sm font-medium uppercase text-muted-foreground">{type}</p>
+                  <p className="mb-2 text-sm font-medium uppercase text-muted-foreground">{t(`settings.${type}`)}</p>
                   <div className="space-y-2">
                     {groupedCategories[type].map((category) => (
                       <div key={category.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
@@ -978,7 +1086,7 @@ export function SettingsPage() {
                           <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: category.color }} />
                           {category.name} {category.budget ? `• ${category.budget}` : ''}
                         </span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void deleteCategory(category.id)} aria-label="Delete category">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void deleteCategory(category.id)} aria-label={t('settings.deleteCategory')}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                       </div>
@@ -993,10 +1101,10 @@ export function SettingsPage() {
         {currentSection === 'tags' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="text-base font-semibold">Create tag</h3>
+              <h3 className="text-base font-semibold">{t('settings.createTag')}</h3>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              Name
+              {t('common.name')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newTag.name}
@@ -1004,7 +1112,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Color
+              {t('settings.color')}
               <input
                 type="color"
                 className="mt-1 h-10 w-full rounded-md border bg-background px-2"
@@ -1014,11 +1122,11 @@ export function SettingsPage() {
             </label>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button onClick={() => void createTag()}>Create tag</Button>
+            <Button onClick={() => void createTag()}>{t('settings.createTag')}</Button>
           </div>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="mb-3 text-base font-semibold">Tags</h3>
+              <h3 className="mb-3 text-base font-semibold">{t('settings.tagsList')}</h3>
               <div className="space-y-2">
                 {tags.map((tag) => (
                   <div key={tag.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
@@ -1026,7 +1134,7 @@ export function SettingsPage() {
                       <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: tag.color }} />
                       {tag.name}
                     </span>
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void deleteTag(tag.id)} aria-label="Delete tag">
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void deleteTag(tag.id)} aria-label={t('settings.deleteTag')}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
                   </div>
@@ -1039,10 +1147,10 @@ export function SettingsPage() {
         {currentSection === 'investment-accounts' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="text-base font-semibold">Create investment account</h3>
+              <h3 className="text-base font-semibold">{t('settings.createInvestmentAccount')}</h3>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              Name
+              {t('common.name')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newInvestmentAccount.name}
@@ -1050,18 +1158,18 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Type
+              {t('settings.type')}
               <select
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newInvestmentAccount.account_type}
                 onChange={(event) => setNewInvestmentAccount((current) => ({ ...current, account_type: event.target.value }))}
               >
-                <option value="brokerage">brokerage</option>
-                <option value="other">other</option>
+                <option value="brokerage">{t('settings.brokerage')}</option>
+                <option value="other">{t('settings.other')}</option>
               </select>
             </label>
             <label className="text-sm">
-              Broker
+              {t('settings.broker')}
               <input
                 className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 value={newInvestmentAccount.broker_name}
@@ -1069,7 +1177,7 @@ export function SettingsPage() {
               />
             </label>
             <label className="text-sm">
-              Current value
+              {t('settings.currentValue')}
               <input
                 type="number"
                 step="0.01"
@@ -1080,18 +1188,35 @@ export function SettingsPage() {
             </label>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button onClick={() => void createInvestmentAccount()}>Create investment account</Button>
+            <Button onClick={() => void createInvestmentAccount()}>{t('settings.createInvestmentAccount')}</Button>
           </div>
             </div>
             <div className="rounded-xl border bg-card p-5 shadow-sm">
-              <h3 className="mb-3 text-base font-semibold">Investment accounts</h3>
+              <h3 className="mb-3 text-base font-semibold">{t('settings.investmentAccountsList')}</h3>
               <div className="space-y-2">
                 {investmentAccounts.map((account) => (
-                  <div key={account.id} className="rounded-md border px-3 py-2 text-sm">
-                    <p className="font-medium">{account.name}</p>
-                    <p className="text-muted-foreground">
-                      {account.account_type} • {account.broker_name ?? 'no broker'} • value {account.current_value}
-                    </p>
+                  <div key={account.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                    <div>
+                      <p className="font-medium">{account.name}</p>
+                      <p className="text-muted-foreground">
+                        {t('settings.accountTypeBrokerValue', { type: account.account_type, broker: account.broker_name ?? t('investments.noBroker'), value: account.current_value })}
+                      </p>
+                      {account.is_active === false && <span className="text-xs text-muted-foreground">{t('settings.archived')}</span>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => openEditInvestmentModal(account)} aria-label={t('settings.editAriaLabel')}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      {account.is_active !== false ? (
+                        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void archiveInvestmentAccount(account.id)}>
+                          {t('common.archive')}
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void restoreInvestmentAccount(account.id)}>
+                          {t('common.restore')}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1101,8 +1226,8 @@ export function SettingsPage() {
 
         {currentSection === 'notifications' && (
           <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <h3 className="text-base font-semibold">Notification preferences</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Choose which events you want to be notified about in the header.</p>
+            <h3 className="text-base font-semibold">{t('settings.notificationPreferences')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{t('settings.chooseNotificationEvents')}</p>
             <div className="mt-4 space-y-3">
               <label className="flex items-center gap-3">
                 <input
@@ -1111,7 +1236,7 @@ export function SettingsPage() {
                   onChange={(e) => handleNotificationPrefChange('pending_payments', e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <span className="text-sm">Pending payments</span>
+                <span className="text-sm">{t('settings.pendingPayments')}</span>
               </label>
               <label className="flex items-center gap-3">
                 <input
@@ -1120,7 +1245,7 @@ export function SettingsPage() {
                   onChange={(e) => handleNotificationPrefChange('credit_card_due', e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <span className="text-sm">Upcoming credit card due dates</span>
+                <span className="text-sm">{t('settings.upcomingCreditCardDue')}</span>
               </label>
               <label className="flex items-center gap-3">
                 <input
@@ -1129,7 +1254,7 @@ export function SettingsPage() {
                   onChange={(e) => handleNotificationPrefChange('budget_alerts', e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <span className="text-sm">Budget threshold alerts</span>
+                <span className="text-sm">{t('settings.budgetAlerts')}</span>
               </label>
               <label className="flex items-center gap-3">
                 <input
@@ -1138,7 +1263,7 @@ export function SettingsPage() {
                   onChange={(e) => handleNotificationPrefChange('reconciliation', e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <span className="text-sm">Reconciliation warnings</span>
+                <span className="text-sm">{t('settings.reconciliationWarnings')}</span>
               </label>
             </div>
           </div>
@@ -1148,10 +1273,10 @@ export function SettingsPage() {
       {editingBankId != null ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">Edit bank account</h3>
+            <h3 className="text-lg font-semibold">{t('settings.editBankAccount')}</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-sm sm:col-span-2">
-                Name
+                {t('common.name')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editBankForm.name}
@@ -1159,7 +1284,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Type
+                {t('settings.type')}
                 <select
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editBankForm.account_type}
@@ -1167,14 +1292,14 @@ export function SettingsPage() {
                     setEditBankForm((c) => ({ ...c, account_type: e.target.value as 'checking' | 'savings' | 'money_market' | 'other' }))
                   }
                 >
-                  <option value="checking">Checking</option>
-                  <option value="savings">Savings</option>
-                  <option value="money_market">Money market</option>
-                  <option value="other">Other</option>
+                  <option value="checking">{t('settings.accountTypeChecking')}</option>
+                  <option value="savings">{t('settings.accountTypeSavings')}</option>
+                  <option value="money_market">{t('settings.accountTypeMoneyMarket')}</option>
+                  <option value="other">{t('settings.accountTypeOther')}</option>
                 </select>
               </label>
               <label className="text-sm">
-                Bank name
+                {t('settings.bankName')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editBankForm.bank_name}
@@ -1182,7 +1307,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Last 4 digits
+                {t('settings.last4Digits')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editBankForm.account_number_last4}
@@ -1190,7 +1315,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Balance
+                {t('common.balance')}
                 <input
                   type="number"
                   step="0.01"
@@ -1200,7 +1325,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Currency
+                {t('common.currency')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editBankForm.currency}
@@ -1208,7 +1333,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm sm:col-span-2">
-                Color
+                {t('settings.color')}
                 <div className="mt-1 flex items-center gap-2">
                   <input
                     type="color"
@@ -1225,8 +1350,8 @@ export function SettingsPage() {
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditingBankId(null)}>Cancel</Button>
-              <Button onClick={() => void saveEditBank()}>Save</Button>
+              <Button variant="outline" onClick={() => setEditingBankId(null)}>{t('common.cancel')}</Button>
+              <Button onClick={() => void saveEditBank()}>{t('common.save')}</Button>
             </div>
           </div>
         </div>
@@ -1235,10 +1360,10 @@ export function SettingsPage() {
       {editingCardId != null ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold">Edit credit card</h3>
+            <h3 className="text-lg font-semibold">{t('settings.editCreditCard')}</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-sm">
-                Name
+                {t('common.name')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editCardForm.name}
@@ -1246,7 +1371,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Issuer
+                {t('settings.issuer')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editCardForm.issuer}
@@ -1254,7 +1379,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Card network
+                {t('settings.cardNetwork')}
                 <select
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editCardForm.card_network}
@@ -1267,7 +1392,7 @@ export function SettingsPage() {
                 </select>
               </label>
               <label className="text-sm">
-                Last 4
+                {t('settings.last4')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editCardForm.card_number_last4}
@@ -1275,7 +1400,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Credit limit
+                {t('settings.creditLimit')}
                 <input
                   type="number"
                   step="0.01"
@@ -1285,7 +1410,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Current balance
+                {t('settings.currentBalance')}
                 <input
                   type="number"
                   step="0.01"
@@ -1295,7 +1420,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Invoice close day
+                {t('settings.invoiceCloseDay')}
                 <input
                   type="number"
                   min={1}
@@ -1306,7 +1431,7 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Due days after close
+                {t('settings.dueDaysAfterClose')}
                 <input
                   type="number"
                   min={1}
@@ -1317,13 +1442,13 @@ export function SettingsPage() {
                 />
               </label>
               <label className="text-sm">
-                Default payment account
+                {t('settings.defaultPaymentAccount')}
                 <select
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editCardForm.default_payment_account_id}
                   onChange={(e) => setEditCardForm((c) => ({ ...c, default_payment_account_id: e.target.value }))}
                 >
-                  <option value="">Default checking (automatic)</option>
+                  <option value="">{t('settings.defaultCheckingAutomatic')}</option>
                   {bankAccounts.filter((a) => a.is_active !== false).map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
@@ -1332,7 +1457,7 @@ export function SettingsPage() {
                 </select>
               </label>
               <label className="text-sm">
-                Currency
+                {t('common.currency')}
                 <input
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   value={editCardForm.currency}
@@ -1341,8 +1466,77 @@ export function SettingsPage() {
               </label>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditingCardId(null)}>Cancel</Button>
-              <Button onClick={() => void saveEditCard()}>Save</Button>
+              <Button variant="outline" onClick={() => setEditingCardId(null)}>{t('common.cancel')}</Button>
+              <Button onClick={() => void saveEditCard()}>{t('common.save')}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingInvestmentId != null ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t('settings.editInvestmentAccount')}</h3>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-sm sm:col-span-2">
+                {t('common.name')}
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editInvestmentForm.name}
+                  onChange={(e) => setEditInvestmentForm((c) => ({ ...c, name: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                {t('settings.type')}
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editInvestmentForm.account_type}
+                  onChange={(e) => setEditInvestmentForm((c) => ({ ...c, account_type: e.target.value }))}
+                >
+                  <option value="brokerage">{t('settings.brokerage')}</option>
+                  <option value="other">{t('settings.other')}</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                {t('settings.broker')}
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editInvestmentForm.broker_name}
+                  onChange={(e) => setEditInvestmentForm((c) => ({ ...c, broker_name: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                {t('settings.last4Digits')}
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editInvestmentForm.account_number_last4}
+                  onChange={(e) => setEditInvestmentForm((c) => ({ ...c, account_number_last4: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                {t('settings.currentValue')}
+                <input
+                  type="number"
+                  step="0.01"
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editInvestmentForm.current_value}
+                  onChange={(e) => setEditInvestmentForm((c) => ({ ...c, current_value: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                {t('common.currency')}
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editInvestmentForm.currency}
+                  onChange={(e) => setEditInvestmentForm((c) => ({ ...c, currency: e.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingInvestmentId(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={() => void saveEditInvestment()}>{t('common.save')}</Button>
             </div>
           </div>
         </div>

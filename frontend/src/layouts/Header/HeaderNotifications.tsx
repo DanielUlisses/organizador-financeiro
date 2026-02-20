@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { Bell, Trash2, Clock } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useNotifications } from '@/hooks/useNotifications'
 import { Button } from '@/components/ui/button'
 
 export function HeaderNotifications() {
   const { open, setOpen, items, toggle, unreadCount, dismiss, snoozeUntilTomorrow } = useNotifications()
+  const { t } = useTranslation()
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export function HeaderNotifications() {
       <button
         type="button"
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border bg-card hover:bg-muted"
-        aria-label="Open notifications"
+        aria-label={t('common.openNotifications')}
         aria-expanded={open}
         onClick={toggle}
       >
@@ -38,14 +40,14 @@ export function HeaderNotifications() {
         <div
           className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border bg-card py-2 shadow-lg"
           role="dialog"
-          aria-label="Notifications"
+          aria-label={t('common.notifications')}
         >
           <div className="border-b px-3 py-2">
-            <h3 className="text-sm font-semibold">Notifications</h3>
+            <h3 className="text-sm font-semibold">{t('common.notifications')}</h3>
           </div>
           <div className="max-h-80 overflow-y-auto">
             {items.length === 0 ? (
-              <p className="px-3 py-4 text-center text-sm text-muted-foreground">No notifications</p>
+              <p className="px-3 py-4 text-center text-sm text-muted-foreground">{t('common.noNotifications')}</p>
             ) : (
               <ul className="divide-y">
                 {items.map((item) => (
@@ -61,7 +63,7 @@ export function HeaderNotifications() {
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => snoozeUntilTomorrow(item.id)}
-                        aria-label="Snooze until tomorrow"
+                        aria-label={t('common.snoozeUntilTomorrow')}
                       >
                         <Clock className="h-4 w-4" />
                       </Button>
@@ -70,7 +72,7 @@ export function HeaderNotifications() {
                         size="icon"
                         className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
                         onClick={() => dismiss(item.id)}
-                        aria-label="Dismiss"
+                        aria-label={t('common.dismiss')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Area,
   AreaChart,
@@ -66,11 +67,14 @@ type MetadataCategory = {
 type WidgetLoadState = 'idle' | 'loading' | 'success' | 'error'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-const percentFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
 
 export function DashboardPage() {
   const { currentMonth } = useMonthContext()
+  const { t, i18n } = useTranslation()
+  const locale = i18n.language === 'pt-BR' ? 'pt-BR' : 'en-US'
+  const currencyCode = i18n.language === 'pt-BR' ? 'BRL' : 'USD'
+  const currencyFormatter = new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode })
+  const percentFormatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
   const userId = 1
   const [loading, setLoading] = useState(false)
   const [fatalError, setFatalError] = useState<string | null>(null)
@@ -191,7 +195,7 @@ export function DashboardPage() {
         setIncomeVsExpensesDaily(null)
         setCategories([])
         setReportsState('error')
-        setReportsError('Unable to load reports widget data.')
+        setReportsError(t('dashboard.reportsError'))
       }
 
       if (accountsRes.status === 'fulfilled' && accountsRes.value.ok) {
@@ -201,7 +205,7 @@ export function DashboardPage() {
       } else {
         setAccounts([])
         setAccountsState('error')
-        setAccountsError('Unable to load account balances.')
+        setAccountsError(t('dashboard.accountsError'))
       }
 
       if (creditCardsRes.status === 'fulfilled' && creditCardsRes.value.ok) {
@@ -211,7 +215,7 @@ export function DashboardPage() {
       } else {
         setCreditCards([])
         setCreditCardsState('error')
-        setCreditCardsError('Unable to load credit card balances.')
+        setCreditCardsError(t('dashboard.creditCardsError'))
       }
 
       if (investmentsRes.status === 'fulfilled' && investmentsRes.value.ok) {
@@ -221,7 +225,7 @@ export function DashboardPage() {
       } else {
         setTotalInvested(0)
         setInvestmentsState('error')
-        setInvestmentsError('Unable to load investment totals.')
+        setInvestmentsError(t('dashboard.investmentsError'))
       }
     } catch (err) {
       setFatalError(err instanceof Error ? err.message : 'Unknown error')
@@ -232,7 +236,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [dateRange.end, dateRange.start, rolling12Range.end, rolling12Range.start])
+  }, [dateRange.end, dateRange.start, rolling12Range.end, rolling12Range.start, t])
 
   useEffect(() => {
     void loadReports()
@@ -300,25 +304,25 @@ export function DashboardPage() {
     <div className="space-y-6">
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <SectionHeader
-          title="Dashboard"
-          subtitle="Monthly financial overview with balances, budgets, and performance indicators"
+          title={t('dashboard.title')}
+          subtitle={t('dashboard.subtitle')}
           actions={<MonthNavigator />}
         />
       </div>
 
-      {loading && <p className="mb-2 text-sm text-muted-foreground">Loading dashboard data...</p>}
+      {loading && <p className="mb-2 text-sm text-muted-foreground">{t('dashboard.loadingData')}</p>}
       {fatalError && <p className="mb-4 text-sm text-red-500">{fatalError}</p>}
       {widgetErrors.length > 0 ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Some widgets are unavailable for this month: {widgetErrors.join(' ')}
+          {t('dashboard.widgetsUnavailable')} {widgetErrors.join(' ')}
         </div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
-          label="Current balance"
+          label={t('dashboard.currentBalance')}
           value={reportsState === 'success' ? currencyFormatter.format(currentBalance) : '--'}
-          hint={`Month net (${dateRange.start} to ${dateRange.end})`}
+          hint={t('common.monthNet', { start: dateRange.start, end: dateRange.end })}
           className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white border-0"
           labelClassName="text-indigo-100"
           hintClassName="text-indigo-100/90"
@@ -337,7 +341,7 @@ export function DashboardPage() {
           }
         />
         <KpiCard
-          label="Monthly income"
+          label={t('dashboard.monthlyIncome')}
           value={reportsState === 'success' ? currencyFormatter.format(totalIncome) : '--'}
           accentClassName="text-white"
           className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white border-0"
@@ -352,7 +356,7 @@ export function DashboardPage() {
           }
         />
         <KpiCard
-          label="Monthly expenses"
+          label={t('dashboard.monthlyExpenses')}
           value={reportsState === 'success' ? currencyFormatter.format(totalExpenses) : '--'}
           accentClassName="text-red-500"
           backgroundChart={
@@ -364,9 +368,9 @@ export function DashboardPage() {
           }
         />
         <KpiCard
-          label="Invested % of income"
+          label={t('dashboard.investedPctIncome')}
           value={reportsState === 'success' && investmentsState === 'success' ? `${percentFormatter.format(investedPercentage)}%` : '--'}
-          hint={investmentsState === 'success' ? currencyFormatter.format(totalInvested) : 'No investment data'}
+          hint={investmentsState === 'success' ? currencyFormatter.format(totalInvested) : t('common.noInvestmentData')}
           backgroundChart={
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={investedPct12}>
@@ -376,7 +380,7 @@ export function DashboardPage() {
           }
         />
         <KpiCard
-          label="Spent % of income"
+          label={t('dashboard.spentPctIncome')}
           value={reportsState === 'success' ? `${percentFormatter.format(spentPercentage)}%` : '--'}
           backgroundChart={
             <ResponsiveContainer width="100%" height="100%">
@@ -389,11 +393,11 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Balance per account" subtitle="Active bank account balances">
-          {accountsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading account balances...</p> : null}
-          {accountsState === 'error' ? <p className="text-sm text-red-500">Account balances unavailable.</p> : null}
+        <ChartCard title={t('dashboard.balancePerAccount')} subtitle={t('dashboard.activeBankBalances')}>
+          {accountsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingAccountBalances')}</p> : null}
+          {accountsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.accountBalancesUnavailable')}</p> : null}
           {accountsState === 'success' && accounts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active accounts available for this user.</p>
+            <p className="text-sm text-muted-foreground">{t('dashboard.noActiveAccounts')}</p>
           ) : null}
           {accountsState === 'success' && accounts.length > 0 ? (
             <div className="h-72">
@@ -410,11 +414,11 @@ export function DashboardPage() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Balance per credit card" subtitle="Current card balance (used amount)">
-          {creditCardsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading credit cards...</p> : null}
-          {creditCardsState === 'error' ? <p className="text-sm text-red-500">Credit card balances unavailable.</p> : null}
+        <ChartCard title={t('dashboard.balancePerCreditCard')} subtitle={t('dashboard.currentCardBalance')}>
+          {creditCardsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingCreditCards')}</p> : null}
+          {creditCardsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.creditCardBalancesUnavailable')}</p> : null}
           {creditCardsState === 'success' && creditCards.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active credit cards available for this user.</p>
+            <p className="text-sm text-muted-foreground">{t('dashboard.noActiveCreditCards')}</p>
           ) : null}
           {creditCardsState === 'success' && creditCards.length > 0 ? (
             <div className="h-72">
@@ -434,11 +438,11 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard
-          title="Budgets: configured vs consumed"
-          subtitle={`Configured ${currencyFormatter.format(configuredBudgetTotal)} | Consumed ${currencyFormatter.format(consumedBudgetTotal)}`}
+          title={t('dashboard.budgetsConfiguredVsConsumed')}
+          subtitle={`${t('common.configured')} ${currencyFormatter.format(configuredBudgetTotal)} | ${t('common.consumed')} ${currencyFormatter.format(consumedBudgetTotal)}`}
         >
-          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading budgets...</p> : null}
-          {reportsState === 'error' ? <p className="text-sm text-red-500">Budget widget unavailable.</p> : null}
+          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingBudgets')}</p> : null}
+          {reportsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.budgetWidgetUnavailable')}</p> : null}
           {reportsState === 'success' ? (
             <div className="space-y-4">
               {budgets.map((budget) => {
@@ -465,13 +469,13 @@ export function DashboardPage() {
         </ChartCard>
 
         <ChartCard
-          title="Expense breakdown by category"
-          subtitle={`Total expenses categories: ${currencyFormatter.format(expenseCategoryTotal)}`}
+          title={t('dashboard.expenseBreakdownByCategory')}
+          subtitle={`${t('dashboard.totalExpensesCategories')} ${currencyFormatter.format(expenseCategoryTotal)}`}
         >
-          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading expense categories...</p> : null}
-          {reportsState === 'error' ? <p className="text-sm text-red-500">Expense breakdown unavailable.</p> : null}
+          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingExpenseCategories')}</p> : null}
+          {reportsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.expenseBreakdownUnavailable')}</p> : null}
           {reportsState === 'success' && expenseCategoryItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No expense categories found for this month.</p>
+            <p className="text-sm text-muted-foreground">{t('dashboard.noExpenseCategories')}</p>
           ) : null}
           {reportsState === 'success' && expenseCategoryItems.length > 0 ? (
             <div className="h-72">
@@ -497,11 +501,11 @@ export function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Inflow vs outflow" subtitle="Area relationship for income and expenses over last 12 months">
-          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading income/expense trend...</p> : null}
-          {reportsState === 'error' ? <p className="text-sm text-red-500">Income vs expenses unavailable.</p> : null}
+        <ChartCard title={t('dashboard.inflowVsOutflowChart')} subtitle={t('dashboard.areaRelationship12Months')}>
+          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingIncomeExpenseTrend')}</p> : null}
+          {reportsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.incomeVsExpensesUnavailable')}</p> : null}
           {reportsState === 'success' && (incomeVsExpensesMonthly?.series.length ?? 0) === 0 ? (
-            <p className="text-sm text-muted-foreground">No monthly series available.</p>
+            <p className="text-sm text-muted-foreground">{t('dashboard.noMonthlySeries')}</p>
           ) : null}
           {reportsState === 'success' && (incomeVsExpensesMonthly?.series.length ?? 0) > 0 ? (
             <div className="h-72">
@@ -519,9 +523,9 @@ export function DashboardPage() {
           ) : null}
         </ChartCard>
 
-        <ChartCard title="Balance trend during month" subtitle="Daily progression for the selected month">
-          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">Loading balance trend...</p> : null}
-          {reportsState === 'error' ? <p className="text-sm text-red-500">Balance trend unavailable.</p> : null}
+        <ChartCard title={t('dashboard.balanceTrendDuringMonth')} subtitle={t('dashboard.dailyProgressionMonth')}>
+          {reportsState === 'loading' ? <p className="text-sm text-muted-foreground">{t('dashboard.loadingBalanceTrend')}</p> : null}
+          {reportsState === 'error' ? <p className="text-sm text-red-500">{t('dashboard.balanceTrendUnavailable')}</p> : null}
           {reportsState === 'success' ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">

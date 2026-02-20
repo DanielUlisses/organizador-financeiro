@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowUpDown, Check, Pencil, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Area, AreaChart, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
@@ -27,19 +28,19 @@ function CardNetworkIcon({ network }: { network?: string | null }) {
   const n = raw.includes('visa') ? 'visa' : raw.includes('master') ? 'mastercard' : raw.includes('amex') || raw.includes('american') ? 'amex' : raw
   if (n === 'visa')
     return (
-      <svg viewBox="0 0 24 24" className="h-8 w-12" fill="currentColor" aria-hidden>
+      <svg viewBox="0 0 24 24" className="h-6 w-10" fill="currentColor" aria-hidden>
         <path d="M9.112 8.262L2.012 15.75H0l2.512-7.488h2.6zm2.6 0l3.9 7.488h-2.65l-.65-1.638h-3.575l-.425 1.638H5.762l4.95-7.488zm8.475 0l2.6 7.488h-2.375l-1.625-4.213-1.3 4.213h-2.6l2.6-7.488h2.35l1.55 4.075z" />
       </svg>
     )
   if (n === 'mastercard')
     return (
-      <svg viewBox="0 0 24 24" className="h-8 w-10" fill="currentColor" aria-hidden>
+      <svg viewBox="0 0 24 24" className="h-6 w-9" fill="currentColor" aria-hidden>
         <path d="M15.245 17.831h-6.49a5.42 5.42 0 0 1 2.06-4.166 5.417 5.417 0 0 1 6.37 0 5.42 5.42 0 0 1 2.06 4.166zm-3.245-6.669a3.735 3.735 0 0 0-3.24 1.875 3.735 3.735 0 0 0 0 3.588 3.735 3.735 0 0 0 3.24 1.875 3.735 3.735 0 0 0 3.24-1.875 3.735 3.735 0 0 0 0-3.588 3.735 3.735 0 0 0-3.24-1.875zM12 3C6.477 3 2 7.477 2 13s4.477 10 10 10 10-4.477 10-10S17.523 3 12 3z" />
       </svg>
     )
   if (n === 'amex')
     return (
-      <svg viewBox="0 0 24 24" className="h-7 w-10" fill="currentColor" aria-hidden>
+      <svg viewBox="0 0 24 24" className="h-5 w-9" fill="currentColor" aria-hidden>
         <path d="M2 6h20v2.4l-1.2 1.6 1.2 1.6V14H2v-2.4l1.2-1.6L2 8.4V6zm0 10h20v2H2v-2zm3-6.5h2v1.5H5V9.5zm3 0h2v1.5H8V9.5zm5 0l2.5 2-2.5 2v-1.5h-2v-1h2V9.5z" />
       </svg>
     )
@@ -98,6 +99,7 @@ const shiftIsoDate = (value: string, deltaDays: number) => {
 
 export function CreditCardsPage() {
   const { currentMonth } = useMonthContext()
+  const { t } = useTranslation()
   const referenceDate = useMemo(
     () => toIsoDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 15)),
     [currentMonth],
@@ -389,6 +391,21 @@ export function CreditCardsPage() {
     }))
   }, [invoiceHistory])
 
+  const lastInvoiceValue = useMemo(() => {
+    if (invoiceHistory.length === 0) return 0
+    return invoiceHistory[invoiceHistory.length - 1]?.statement_balance ?? 0
+  }, [invoiceHistory])
+
+  const paymentStatus = useMemo(() => {
+    if (!summary) return t('common.noCycleLoaded')
+    const due = new Date(`${summary.due_date}T23:59:59`)
+    const now = new Date()
+    if (summary.statement_balance <= 0) return t('common.paid')
+    if (now > due) return t('common.overdue')
+    const pendingPayments = summary.transactions.filter((item) => item.direction === 'payment' && item.status === 'pending').length
+    return pendingPayments > 0 ? t('common.paymentPendingConfirmation') : t('common.open')
+  }, [summary, t])
+
   const openEditModal = (item: StatementTransaction) => {
     const transactionType = getTransactionTypeFromBackendCategory(item.category)
     setEditing(item)
@@ -626,11 +643,11 @@ export function CreditCardsPage() {
     <div className="space-y-6">
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <SectionHeader
-          title="Credit Cards"
+          title={t('creditCards.title')}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <label className="sr-only" htmlFor="card-select">
-                Card
+                {t('creditCards.card')}
               </label>
               <select
                 id="card-select"
@@ -646,7 +663,7 @@ export function CreditCardsPage() {
               </select>
               <MonthNavigator />
               <Button variant="outline" size="sm" onClick={() => void refreshData()}>
-                Refresh
+                {t('common.refresh')}
               </Button>
             </div>
           }
@@ -664,29 +681,48 @@ export function CreditCardsPage() {
           >
             <div className="flex items-start justify-between">
               <span className="text-sm font-semibold tracking-wide text-white/95">{selectedCard?.name ?? 'Credit card'}</span>
-              <div className="text-white/90">
+              <div className="text-white/90 flex h-8 w-12 items-center justify-end overflow-hidden">
                 <CardNetworkIcon network={selectedCard?.card_network ?? selectedCard?.issuer} />
               </div>
             </div>
             <div className="flex items-end justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <p className="text-xs uppercase tracking-wider text-white/70">Cardholder</p>
+                <p className="text-xs uppercase tracking-wider text-white/70">{t('common.cardholder')}</p>
                 <p className="font-mono text-sm tracking-widest">**** **** **** {selectedCard?.card_number_last4 ?? '****'}</p>
                 <p className="text-xs text-white/60">
-                  EXP {summary?.close_date?.slice(5, 7) ?? '**'}/{summary?.due_date?.slice(2, 4) ?? '**'} · Available {currency.format(selectedCard?.available_credit ?? 0)}
+                  {t('common.exp')} {summary?.close_date?.slice(5, 7) ?? '**'}/{summary?.due_date?.slice(2, 4) ?? '**'} · {t('common.available')} {currency.format(selectedCard?.available_credit ?? 0)}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-white/70">Statement balance</p>
+                <p className="text-xs uppercase tracking-wider text-white/70">{t('common.statementBalance')}</p>
                 <p className="text-2xl font-bold tracking-tight">{currency.format(summary?.statement_balance ?? selectedCard?.current_balance ?? 0)}</p>
               </div>
             </div>
           </div>
+          <div className="grid grid-cols-1 gap-3 border-t bg-card px-5 py-4 sm:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('common.lastInvoiceValue')}</p>
+              <p className="mt-1 text-2xl font-semibold">{currency.format(lastInvoiceValue)}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('common.paymentStatus')}</p>
+              <p className="mt-1 text-sm font-medium">{paymentStatus}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('common.currentBillingCycle')}</p>
+              <p className="mt-1 text-sm font-medium">
+                {summary ? `${summary.cycle_start_date} to ${summary.cycle_end_date}` : '-'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t('common.closes')} {summary?.close_date ?? '-'} • {t('common.due')} {summary?.due_date ?? '-'}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <ChartCard title="Past 12 months invoices" subtitle="Charges per billing cycle with average line">
+        <ChartCard title={t('common.past12MonthsInvoices')} subtitle={t('common.chargesPerBillingCycle')}>
           {invoiceChartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No invoice history for this card.</p>
+            <p className="text-sm text-muted-foreground">{t('common.noInvoiceHistory')}</p>
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -696,8 +732,8 @@ export function CreditCardsPage() {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => currency.format(v)} />
                   <Tooltip formatter={(value: number) => currency.format(value)} />
                   <Legend />
-                  <Bar dataKey="charges" fill={CHART_THEME.series.balance} name="Charges" radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="average" stroke={CHART_THEME.series.expenses} strokeWidth={2} strokeDasharray="4 4" name="Average" dot={false} />
+                  <Bar dataKey="charges" fill={CHART_THEME.series.balance} name={t('common.charges')} radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="average" stroke={CHART_THEME.series.expenses} strokeWidth={2} strokeDasharray="4 4" name={t('common.average')} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -705,14 +741,14 @@ export function CreditCardsPage() {
         </ChartCard>
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground">Loading credit card statement...</p> : null}
+      {loading ? <p className="text-sm text-muted-foreground">{t('creditCards.loadingStatement')}</p> : null}
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
       {notice ? <p className="text-sm text-emerald-600">{notice}</p> : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Invoice balance health" subtitle="Running statement balance and daily charges">
+        <ChartCard title={t('common.invoiceBalanceHealth')} subtitle={t('common.runningStatementBalance')}>
           {chartSeries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No card transactions in this cycle.</p>
+            <p className="text-sm text-muted-foreground">{t('common.noCardTransactions')}</p>
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -731,8 +767,8 @@ export function CreditCardsPage() {
                   <XAxis dataKey="day" />
                   <YAxis />
                   <Tooltip formatter={(value: number | string) => currency.format(Number(value))} />
-                  <Area type="monotone" dataKey="runningBalance" stroke={CHART_THEME.series.balance} fill="url(#cc-balance-gradient)" name="Running balance" />
-                  <Area type="monotone" dataKey="dailyCharges" stroke={CHART_THEME.series.expenses} fill="url(#cc-charges-gradient)" name="Daily charges" />
+                  <Area type="monotone" dataKey="runningBalance" stroke={CHART_THEME.series.balance} fill="url(#cc-balance-gradient)" name={t('common.runningBalance')} />
+                  <Area type="monotone" dataKey="dailyCharges" stroke={CHART_THEME.series.expenses} fill="url(#cc-charges-gradient)" name={t('common.dailyCharges')} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -740,11 +776,11 @@ export function CreditCardsPage() {
         </ChartCard>
 
         <ChartCard
-          title="Charges vs payments"
-          subtitle={`Charges ${currency.format(summary?.charges_total ?? 0)} • Payments ${currency.format(summary?.payments_total ?? 0)}`}
+          title={t('creditCards.chargesVsPayments')}
+          subtitle={t('creditCards.chargesPaymentsSubtitle', { charges: currency.format(summary?.charges_total ?? 0), payments: currency.format(summary?.payments_total ?? 0) })}
         >
           {chartSeries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No flow points in this cycle.</p>
+            <p className="text-sm text-muted-foreground">{t('common.noFlowPointsInCycle')}</p>
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -772,16 +808,16 @@ export function CreditCardsPage() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Register card payment" subtitle="Delete planned payment and create with another account when needed">
+      <ChartCard title={t('creditCards.registerCardPayment')} subtitle={t('creditCards.registerCardPaymentSubtitle')}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <label className="text-sm sm:col-span-2">
-            Source account
+            {t('common.sourceAccount')}
             <select
               value={paymentAccountId}
               onChange={(event) => setPaymentAccountId(event.target.value)}
               className="mt-1 w-full rounded-md border bg-background px-3 py-2"
             >
-              <option value="">Select account</option>
+              <option value="">{t('common.selectAccount')}</option>
               {bankAccounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
@@ -790,7 +826,7 @@ export function CreditCardsPage() {
             </select>
           </label>
           <label className="text-sm">
-            Amount
+            {t('common.amount')}
             <input
               type="number"
               step="0.01"
@@ -800,7 +836,7 @@ export function CreditCardsPage() {
             />
           </label>
           <label className="text-sm">
-            Date
+            {t('common.date')}
             <input
               type="date"
               value={paymentDate}
@@ -809,7 +845,7 @@ export function CreditCardsPage() {
             />
           </label>
           <label className="text-sm sm:col-span-3">
-            Description
+            {t('common.description')}
             <input
               type="text"
               value={paymentDescription}
@@ -819,23 +855,23 @@ export function CreditCardsPage() {
           </label>
           <div className="flex items-end">
             <Button onClick={() => void createCardPayment()} className="w-full">
-              Create payment
+              {t('common.createPayment')}
             </Button>
           </div>
         </div>
       </ChartCard>
 
       <ChartCard
-        title="Card statement (invoice cycle)"
-        subtitle={`${summary?.transactions.length ?? 0} transactions in cycle`}
+        title={t('creditCards.cardStatementInvoiceCycle')}
+        subtitle={t('creditCards.transactionsInCycle', { count: summary?.transactions.length ?? 0 })}
         titleAction={
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Sort</span>
+            <span className="text-xs text-muted-foreground">{t('common.sort')}</span>
             <button
               type="button"
               onClick={() => setSortOrder((o) => (o === 'older' ? 'newer' : 'older'))}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background hover:bg-muted"
-              aria-label={sortOrder === 'older' ? 'Newer first' : 'Older first'}
+              aria-label={sortOrder === 'older' ? t('common.newerFirst') : t('common.olderFirst')}
             >
               <ArrowUpDown className="h-4 w-4" />
             </button>
@@ -843,7 +879,7 @@ export function CreditCardsPage() {
         }
       >
         {groupedStatement.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No transactions available for selected cycle.</p>
+          <p className="text-sm text-muted-foreground">{t('common.noTransactionsForCycle')}</p>
         ) : (
           <div className="space-y-2">
             {groupedStatement.map((group, index) => (
@@ -859,14 +895,14 @@ export function CreditCardsPage() {
                       <div key={`${item.payment_id}-${item.occurrence_id ?? 'base'}-${item.transaction_date}`} className="grid grid-cols-12 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-background/60">
                         <div className="col-span-4 truncate">{item.description}</div>
                         <div className="col-span-2 text-muted-foreground">{categories.find((cat) => cat.id === item.category_id)?.name ?? '-'}</div>
-                        <div className="col-span-2 text-muted-foreground">{item.status}</div>
+                        <div className="col-span-2 text-muted-foreground">{(item.status ?? '') ? t(`status.${(item.status ?? '').toLowerCase()}`, (item.status ?? '')) : '-'}</div>
                         <div className={`col-span-2 text-right ${item.signed_amount < 0 ? 'text-green-600' : 'text-red-500'}`}>
                           {currency.format(Math.abs(item.amount))}
                         </div>
                         <div className="col-span-2 flex justify-end gap-1">
                           <button
                             type="button"
-                            aria-label={isReconciled ? 'Move to pending' : 'Confirm transaction'}
+                            aria-label={isReconciled ? t('common.moveToPending') : t('common.confirmTransaction')}
                             className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${
                               isReconciled ? 'border-emerald-500 bg-emerald-500 text-white' : 'bg-card'
                             }`}
@@ -876,7 +912,7 @@ export function CreditCardsPage() {
                           </button>
                           <button
                             type="button"
-                            aria-label="Edit transaction"
+                            aria-label={t('common.editTransaction')}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-card"
                             onClick={() => openEditModal(item)}
                           >
@@ -896,10 +932,10 @@ export function CreditCardsPage() {
       {editing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">Edit transaction</h3>
+            <h3 className="text-lg font-semibold">{t('common.editTransaction')}</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-sm sm:col-span-2">
-                Description
+                {t('common.description')}
                 <input
                   type="text"
                   value={editForm.description}
@@ -909,7 +945,7 @@ export function CreditCardsPage() {
               </label>
               {editing.occurrence_id && editing.payment_type === 'recurring' ? (
                 <label className="text-sm sm:col-span-2">
-                  Recurring scope
+                  {t('common.recurringScopeLabel')}
                   <select
                     value={recurringScope}
                     onChange={(event) =>
@@ -917,14 +953,14 @@ export function CreditCardsPage() {
                     }
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   >
-                    <option value="only_event">Only this event</option>
-                    <option value="from_event_forward">From this event forward</option>
-                    <option value="all_events">All events</option>
+                    <option value="only_event">{t('common.recurringScopeOnlyEvent')}</option>
+                    <option value="from_event_forward">{t('common.recurringScopeFromForward')}</option>
+                    <option value="all_events">{t('common.recurringScopeAllEvents')}</option>
                   </select>
                 </label>
               ) : null}
               <label className="text-sm">
-                Date
+                {t('common.date')}
                 <input
                   type="date"
                   value={editForm.dueDate}
@@ -934,13 +970,13 @@ export function CreditCardsPage() {
               </label>
               {editing.direction === 'payment' ? (
                 <label className="text-sm">
-                  Source account
+                  {t('common.sourceAccount')}
                   <select
                     value={paymentAccountId}
                     onChange={(event) => setPaymentAccountId(event.target.value)}
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   >
-                    <option value="">Select account</option>
+                    <option value="">{t('common.selectAccount')}</option>
                     {bankAccounts.map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name}
@@ -950,7 +986,7 @@ export function CreditCardsPage() {
                 </label>
               ) : null}
               <label className="text-sm">
-                Value
+                {t('common.amount')}
                 <input
                   type="number"
                   step="0.01"
@@ -960,25 +996,25 @@ export function CreditCardsPage() {
                 />
               </label>
               <label className="text-sm">
-                Transaction type
+                {t('common.transactionType')}
                 <select
                   value={editForm.transactionType}
                   onChange={(event) => setEditForm((current) => ({ ...current, transactionType: event.target.value as TransactionType }))}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="expense">expense</option>
-                  <option value="income">income</option>
-                  <option value="transfer">transfer</option>
+                  <option value="expense">{t('settings.expense')}</option>
+                  <option value="income">{t('settings.income')}</option>
+                  <option value="transfer">{t('settings.transfer')}</option>
                 </select>
               </label>
               <label className="text-sm">
-                Category
+                {t('common.category')}
                 <select
                   value={editForm.categoryId}
                   onChange={(event) => setEditForm((current) => ({ ...current, categoryId: event.target.value }))}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="">No category</option>
+                  <option value="">{t('common.noCategory')}</option>
                   {categories
                     .filter((category) => category.transaction_type === editForm.transactionType)
                     .map((category) => (
@@ -989,7 +1025,7 @@ export function CreditCardsPage() {
                 </select>
               </label>
               <label className="text-sm sm:col-span-2">
-                Tags
+                {t('common.tags')}
                 <select
                   multiple
                   value={editTagIds.map(String)}
@@ -1004,21 +1040,21 @@ export function CreditCardsPage() {
                 </select>
               </label>
               <label className="text-sm">
-                Status
+                {t('common.statusLabel')}
                 <select
                   value={editForm.status}
                   onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value }))}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="pending">pending</option>
-                  <option value="processed">processed</option>
-                  <option value="reconciled">reconciled</option>
-                  <option value="scheduled">scheduled</option>
-                  <option value="cancelled">cancelled</option>
+                  <option value="pending">{t('status.pending')}</option>
+                  <option value="processed">{t('status.processed')}</option>
+                  <option value="reconciled">{t('status.reconciled')}</option>
+                  <option value="scheduled">{t('status.scheduled')}</option>
+                  <option value="cancelled">{t('status.cancelled')}</option>
                 </select>
               </label>
               <label className="text-sm sm:col-span-2">
-                Notes
+                {t('common.notes')}
                 <textarea
                   value={editForm.notes}
                   onChange={(event) => setEditForm((current) => ({ ...current, notes: event.target.value }))}
@@ -1034,13 +1070,13 @@ export function CreditCardsPage() {
                 onClick={() => void deleteTransaction()}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete
+                {t('common.delete')}
               </button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setEditing(null)}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
-                <Button onClick={() => void saveEdit()}>Save</Button>
+                <Button onClick={() => void saveEdit()}>{t('common.save')}</Button>
               </div>
             </div>
           </div>

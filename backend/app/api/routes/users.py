@@ -1,12 +1,18 @@
 """User routes"""
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
+
+from app.config import get_settings
 from app.db import get_db
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+EXT_BY_TYPE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
 @router.get("/", response_model=List[UserResponse])
@@ -52,3 +58,36 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
     return None
+
+
+@router.put("/{user_id}/profile-image", response_model=UserResponse)
+def upload_profile_image(
+    user_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload profile picture. Saved under same uploads path as other app uploads (e.g. CSV/OFX)."""
+    user = UserService.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    content_type = file.content_type or ""
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}",
+        )
+    settings = get_settings()
+    uploads_dir = Path(settings.uploads_dir)
+    profile_dir = uploads_dir / "profile"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    ext = EXT_BY_TYPE.get(content_type, ".jpg")
+    filename = f"user_{user_id}{ext}"
+    path_in_uploads = f"profile/{filename}"
+    dest = uploads_dir / path_in_uploads
+    try:
+        contents = file.file.read()
+        dest.write_bytes(contents)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}") from e
+    updated = UserService.update_user(db, user_id, UserUpdate(profile_image_path=path_in_uploads))
+    return updated

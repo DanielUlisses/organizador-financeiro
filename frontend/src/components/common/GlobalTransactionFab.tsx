@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Calculator, Plus, X } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import {
   defaultChildCategory,
@@ -32,6 +33,7 @@ const addByFrequency = (baseDate: Date, frequency: string, steps: number) => {
 
 export function GlobalTransactionFab() {
   const { pathname } = useLocation()
+  const { t } = useTranslation()
   const defaults = useMemo(() => getDefaultsByPath(pathname), [pathname])
 
   const [open, setOpen] = useState(false)
@@ -42,7 +44,7 @@ export function GlobalTransactionFab() {
   const [calcTerms, setCalcTerms] = useState<number[]>([])
 
   const [kind, setKind] = useState<TransactionKind>(defaults.kind)
-  const [description, setDescription] = useState('New transaction')
+  const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('0')
   const [transactionType, setTransactionType] = useState<TransactionType>('expense')
   const [categoryChild, setCategoryChild] = useState(defaultChildCategory('expense'))
@@ -109,7 +111,7 @@ export function GlobalTransactionFab() {
     setFromAccountType(defaults.fromType === 'credit_card' ? 'credit_card' : 'bank_account')
     setFromAccountId(localStorage.getItem('of_default_account_id') ?? '')
     setToAccountId('')
-    setDescription(defaults.fromType === 'credit_card' ? 'New card transaction' : 'New transaction')
+    setDescription(defaults.fromType === 'credit_card' ? t('fab.newCardTransaction') : t('fab.newTransaction'))
     const defaultType: TransactionType = defaults.fromType === 'credit_card' ? 'expense' : 'expense'
     setTransactionType(defaultType)
     setCategoryChild(defaultChildCategory(defaultType))
@@ -126,19 +128,19 @@ export function GlobalTransactionFab() {
     setNotice(null)
 
     if (kind === 'investment') {
-      setNotice('Investment quick-add will be connected in the investments phase API flow.')
+      setNotice(t('fab.investmentQuickAddNote'))
       return
     }
 
     const numericAmount = Number(amount)
     if (Number.isNaN(numericAmount) || numericAmount <= 0) {
-      setError('Amount must be greater than zero.')
+      setError(t('fab.amountGreaterZero'))
       return
     }
 
     try {
       if (!fromAccountId) {
-        setError('Select an account.')
+        setError(t('fab.selectAccount'))
         return
       }
 
@@ -169,7 +171,7 @@ export function GlobalTransactionFab() {
           }),
         })
         if (!response.ok) throw new Error('Failed to create transaction.')
-        setNotice('Transaction created.')
+        setNotice(t('fab.transactionCreated'))
         window.dispatchEvent(new CustomEvent('of:transactions-changed'))
         setOpen(false)
         return
@@ -208,11 +210,11 @@ export function GlobalTransactionFab() {
         { method: 'POST' },
       )
       if (!generateResponse.ok) throw new Error('Recurring created but failed to generate future items.')
-      setNotice('Recurring transaction created.')
+      setNotice(t('fab.recurringCreated'))
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
       setOpen(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create action failed.')
+      setError(err instanceof Error ? err.message : t('fab.createActionFailed'))
     }
   }
 
@@ -222,7 +224,7 @@ export function GlobalTransactionFab() {
         type="button"
         onClick={openModal}
         className="fixed bottom-6 right-6 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
-        aria-label="Add transaction"
+        aria-label={t('fab.addTransaction')}
       >
         <Plus className="h-5 w-5" />
       </button>
@@ -231,7 +233,7 @@ export function GlobalTransactionFab() {
         <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/30 p-4 sm:items-center sm:justify-center">
           <div className="w-full max-w-xl rounded-xl border bg-card p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Add new transaction</h3>
+              <h3 className="text-lg font-semibold">{t('fab.addNewTransaction')}</h3>
               <button type="button" onClick={() => setOpen(false)} className="rounded-md border p-1">
                 <X className="h-4 w-4" />
               </button>
@@ -239,19 +241,19 @@ export function GlobalTransactionFab() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-sm">
-                Type
+                {t('common.type')}
                 <select
                   value={kind}
                   onChange={(event) => setKind(event.target.value as TransactionKind)}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="one_time">Regular transaction</option>
-                  <option value="recurring">Recurring transaction</option>
-                  <option value="investment">Investment entry</option>
+                  <option value="one_time">{t('fab.regularTransaction')}</option>
+                  <option value="recurring">{t('fab.recurringTransaction')}</option>
+                  <option value="investment">{t('fab.investmentEntry')}</option>
                 </select>
               </label>
               <label className="text-sm">
-                Date
+                {t('common.date')}
                 <input
                   type="date"
                   value={dueDate}
@@ -260,7 +262,7 @@ export function GlobalTransactionFab() {
                 />
               </label>
               <label className="text-sm sm:col-span-2">
-                Description
+                {t('common.description')}
                 <input
                   type="text"
                   value={description}
@@ -269,7 +271,7 @@ export function GlobalTransactionFab() {
                 />
               </label>
               <label className="text-sm">
-                Transaction type
+                {t('fab.transactionType')}
                 <select
                   value={transactionType}
                   onChange={(event) => {
@@ -285,7 +287,7 @@ export function GlobalTransactionFab() {
                 </select>
               </label>
               <label className="text-sm">
-                Category
+                {t('common.category')}
                 <select
                   value={categoryChild}
                   onChange={(event) => setCategoryChild(event.target.value)}
@@ -302,7 +304,7 @@ export function GlobalTransactionFab() {
                 </select>
               </label>
               <label className="text-sm sm:col-span-2">
-                Tags
+                {t('common.tags')}
                 <select
                   multiple
                   value={selectedTagIds.map(String)}
@@ -320,7 +322,7 @@ export function GlobalTransactionFab() {
                 </select>
               </label>
               <label className="text-sm">
-                Amount
+                {t('common.amount')}
                 <div className="mt-1 flex gap-2">
                   <input
                     type="number"
@@ -335,24 +337,24 @@ export function GlobalTransactionFab() {
                 </div>
               </label>
               <label className="text-sm">
-                Source account type
+                {t('fab.sourceAccountType')}
                 <select
                   value={fromAccountType}
                   onChange={(event) => setFromAccountType(event.target.value as 'bank_account' | 'credit_card')}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="bank_account">bank account</option>
-                  <option value="credit_card">credit card</option>
+                  <option value="bank_account">{t('fab.bankAccountOption')}</option>
+                  <option value="credit_card">{t('fab.creditCardOption')}</option>
                 </select>
               </label>
               <label className="text-sm">
-                Account
+                {t('common.account')}
                 <select
                   value={fromAccountId}
                   onChange={(event) => setFromAccountId(event.target.value)}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="">Select source</option>
+                  <option value="">{t('common.selectSource')}</option>
                   {(fromAccountType === 'bank_account' ? bankAccounts : creditCards).map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
@@ -361,13 +363,13 @@ export function GlobalTransactionFab() {
                 </select>
               </label>
               <label className="text-sm">
-                Destination account (optional)
+                {t('fab.destinationAccountOptional')}
                 <select
                   value={toAccountId}
                   onChange={(event) => setToAccountId(event.target.value)}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="">None</option>
+                  <option value="">{t('common.none')}</option>
                   {bankAccounts
                     .filter((item) => String(item.id) !== fromAccountId)
                     .map((item) => (
@@ -378,7 +380,7 @@ export function GlobalTransactionFab() {
                 </select>
               </label>
               <label className="text-sm sm:col-span-2">
-                Notes
+                {t('common.notes')}
                 <input
                   type="text"
                   value={notes}
@@ -390,21 +392,21 @@ export function GlobalTransactionFab() {
               {kind === 'recurring' ? (
                 <>
                   <label className="text-sm">
-                    Frequency
+                    {t('fab.frequency')}
                     <select
                       value={recurrenceFrequency}
                       onChange={(event) => setRecurrenceFrequency(event.target.value)}
                       className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     >
-                      <option value="monthly">monthly</option>
-                      <option value="weekly">weekly</option>
-                      <option value="daily">daily</option>
-                      <option value="quarterly">quarterly</option>
-                      <option value="yearly">yearly</option>
+                      <option value="monthly">{t('fab.monthly')}</option>
+                      <option value="weekly">{t('fab.weekly')}</option>
+                      <option value="daily">{t('fab.daily')}</option>
+                      <option value="quarterly">{t('fab.quarterly')}</option>
+                      <option value="yearly">{t('fab.yearly')}</option>
                     </select>
                   </label>
                   <label className="text-sm">
-                    Recurrence count
+                    {t('fab.recurrenceCount')}
                     <input
                       type="number"
                       min="1"
@@ -414,14 +416,14 @@ export function GlobalTransactionFab() {
                     />
                   </label>
                   <label className="text-sm sm:col-span-2">
-                    Recurring value mode
+                    {t('fab.recurringValueMode')}
                     <select
                       value={recurrenceAmountMode}
                       onChange={(event) => setRecurrenceAmountMode(event.target.value as 'total_split' | 'per_item')}
                       className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                     >
-                      <option value="per_item">Amount is value for each recurrence item</option>
-                      <option value="total_split">Amount is total to split across recurrence count</option>
+                      <option value="per_item">{t('fab.amountPerRecurrence')}</option>
+                      <option value="total_split">{t('fab.amountTotalSplit')}</option>
                     </select>
                   </label>
                 </>
@@ -430,7 +432,7 @@ export function GlobalTransactionFab() {
 
             {calculatorOpen ? (
               <div className="mt-4 rounded-md border bg-background p-3">
-                <p className="text-sm font-medium">Quick sum calculator</p>
+                <p className="text-sm font-medium">{t('common.quickSumCalculator')}</p>
                 <div className="mt-2 flex gap-2">
                   <input
                     type="number"
@@ -450,11 +452,11 @@ export function GlobalTransactionFab() {
                       }
                     }}
                   >
-                    Add
+                    {t('common.add')}
                   </Button>
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">Terms: {calcTerms.length > 0 ? calcTerms.join(' + ') : 'none'}</p>
-                <p className="mt-1 text-sm font-semibold">Total: {calcTotal.toFixed(2)}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{t('common.terms')}: {calcTerms.length > 0 ? calcTerms.join(' + ') : 'none'}</p>
+                <p className="mt-1 text-sm font-semibold">{t('common.total')}: {calcTotal.toFixed(2)}</p>
                 <div className="mt-2 flex gap-2">
                   <Button
                     type="button"
@@ -464,10 +466,10 @@ export function GlobalTransactionFab() {
                       setCalculatorOpen(false)
                     }}
                   >
-                    Use total
+                    {t('common.useTotal')}
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => setCalcTerms([])}>
-                    Clear
+                    {t('common.clear')}
                   </Button>
                 </div>
               </div>
@@ -478,9 +480,9 @@ export function GlobalTransactionFab() {
 
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setOpen(false)}>
-                Close
+                {t('common.close')}
               </Button>
-              <Button onClick={() => void submit()}>Create</Button>
+              <Button onClick={() => void submit()}>{t('common.create')}</Button>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { ChartCard } from '@/components/common/ChartCard'
 
@@ -44,6 +45,7 @@ const parseSellMeta = (notes?: string | null) => {
 }
 
 export function InvestmentTaxReportPage() {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState<number>(new Date().getFullYear())
@@ -110,21 +112,21 @@ export function InvestmentTaxReportPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-card p-5 shadow-sm">
-        <SectionHeader title="Investment tax transactions" subtitle="Yearly view grouped by month with realized profit fields from sell notes." />
+        <SectionHeader title={t('investments.investmentsTax')} subtitle={t('investments.investmentsTaxSubtitle')} />
       </div>
 
-      <ChartCard title="Filter">
+      <ChartCard title={t('common.filter')}>
         <div className="flex items-center gap-3">
-          <label className="text-sm">Year</label>
+          <label className="text-sm">{t('common.year')}</label>
           <input className="w-32 rounded-md border bg-background px-3 py-2 text-sm" type="number" value={year} onChange={(e)=>setYear(Number(e.target.value))} />
         </div>
       </ChartCard>
 
-      {loading ? <p className="text-sm text-muted-foreground">Loading tax rows...</p> : null}
+      {loading ? <p className="text-sm text-muted-foreground">{t('investments.loadingTaxRows')}</p> : null}
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
-      <ChartCard title={`Transactions (${rows.length})`} subtitle="Includes principal, gross, paid tax, and realized profit">
-        {grouped.length === 0 ? <p className="text-sm text-muted-foreground">No investment transactions for this year.</p> : (
+      <ChartCard title={t('investments.transactionsCount', { count: rows.length })} subtitle={t('investments.includesPrincipalGrossTaxProfit')}>
+        {grouped.length === 0 ? <p className="text-sm text-muted-foreground">{t('investments.noInvestmentTransactionsYear')}</p> : (
           <div className="space-y-4">
             {grouped.map(([month, monthRows]) => {
               const monthProfit = monthRows.reduce((sum, item) => sum + item.profit, 0)
@@ -132,7 +134,7 @@ export function InvestmentTaxReportPage() {
                 <div key={month}>
                   <div className="mb-2 flex items-center justify-between border-b pb-1 text-sm font-semibold">
                     <span>{month}</span>
-                    <span>Profit {currency.format(monthProfit)}</span>
+                    <span>{t('common.profit')} {currency.format(monthProfit)}</span>
                   </div>
                   <div className="space-y-1 text-sm">
                     {monthRows.map((item, index) => (

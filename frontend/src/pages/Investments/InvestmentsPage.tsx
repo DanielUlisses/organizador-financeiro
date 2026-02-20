@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Calendar, CalendarClock, CalendarRange, Pencil, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { ChartCard } from '@/components/common/ChartCard'
 import { Button } from '@/components/ui/button'
@@ -47,13 +48,13 @@ type InvestmentSchedule = {
   notes?: string | null
 }
 
-const ASSET_TYPE_OPTIONS: Array<{ value: Holding['asset_type']; label: string }> = [
-  { value: 'national_treasury', label: 'Tesouro Nacional' },
-  { value: 'cdb_rdb', label: 'CDB/RDB' },
-  { value: 'stock', label: 'Acoes' },
-  { value: 'fii', label: 'FIIs' },
-  { value: 'fund', label: 'Fundos' },
-  { value: 'other', label: 'Outro' },
+const ASSET_TYPE_OPTIONS: Array<{ value: Holding['asset_type']; labelKey: string }> = [
+  { value: 'national_treasury', labelKey: 'investments.assetTypeNationalTreasury' },
+  { value: 'cdb_rdb', labelKey: 'investments.assetTypeCdbRdb' },
+  { value: 'stock', labelKey: 'investments.assetTypeStock' },
+  { value: 'fii', labelKey: 'investments.assetTypeFii' },
+  { value: 'fund', labelKey: 'investments.assetTypeFund' },
+  { value: 'other', labelKey: 'investments.assetTypeOther' },
 ]
 
 const addByFrequency = (baseDate: Date, frequency: string, steps: number) => {
@@ -75,6 +76,7 @@ const shiftIsoDate = (value: string, deltaDays: number) => {
 }
 
 export function InvestmentsPage() {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -405,7 +407,7 @@ export function InvestmentsPage() {
       await loadHoldingsAndSchedules(selectedAccountId)
       window.dispatchEvent(new CustomEvent('of:transactions-changed'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create holding failed.')
+      setError(err instanceof Error ? err.message : t('investments.createHoldingFailed'))
     }
   }
 
@@ -815,41 +817,36 @@ export function InvestmentsPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-card p-5 shadow-sm">
-        <SectionHeader title="Investimentos" subtitle="Tesouro, CDB/RDB, Acoes, FIIs e Fundos (CNPJ), com compra, venda e agendamentos" />
+        <SectionHeader title={t('investments.title')} subtitle="Tesouro, CDB/RDB, Acoes, FIIs e Fundos (CNPJ), com compra, venda e agendamentos" />
       </div>
       {loading ? <p className="text-sm text-muted-foreground">Loading investments...</p> : null}
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
       {notice ? <p className="text-sm text-emerald-600">{notice}</p> : null}
 
-      <ChartCard title="Total invested over time" subtitle="Select timeframe for cumulative invested principal">
+      <ChartCard title={t('investments.totalInvestedOverTime')} subtitle={t('investments.selectTimeframeCumulative')}>
         <div className="mb-4 flex justify-end">
-          <div
-            className="inline-flex items-center gap-0.5 rounded-full border border-border bg-muted/30 p-1"
-            role="group"
-            aria-label="Time range"
-          >
+          <div className="inline-flex items-center gap-0.5 rounded-full border border-border bg-muted/30 p-1" role="group" aria-label={t('investments.timeRange')}>
             {(
               [
-                { value: 'all' as const, icon: CalendarRange },
-                { value: '5y' as const, icon: Calendar },
-                { value: '3y' as const, icon: Calendar },
-                { value: '1y' as const, icon: CalendarClock },
-                { value: '6m' as const, icon: CalendarClock },
-                { value: '3m' as const, icon: CalendarClock },
+                { value: 'all' as const, labelKey: 'investments.all' },
+                { value: '5y' as const, labelKey: '5Y' },
+                { value: '3y' as const, labelKey: '3Y' },
+                { value: '1y' as const, labelKey: '1Y' },
+                { value: '6m' as const, labelKey: '6M' },
+                { value: '3m' as const, labelKey: '3M' },
               ] as const
-            ).map(({ value, icon: Icon }) => (
+            ).map(({ value, labelKey }) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setInvestedRange(value)}
-                title={value === 'all' ? 'All period' : value === '5y' ? '5 years' : value === '3y' ? '3 years' : value === '1y' ? '1 year' : value === '6m' ? '6 months' : '3 months'}
-                className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                className={`flex h-8 min-w-10 items-center justify-center rounded-full px-2 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                   investedRange === value
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground'
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                {labelKey.startsWith('investments.') ? t(labelKey) : labelKey}
               </button>
             ))}
           </div>
@@ -868,8 +865,8 @@ export function InvestmentsPage() {
       </ChartCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Realized P&L by asset class / month" subtitle="Based on processed or reconciled sell transactions">
-          {pnlByAssetClassSeries.rows.length === 0 ? <p className="text-sm text-muted-foreground">No realized sell P&L yet.</p> : (
+        <ChartCard title={t('investments.realizedPnLByAssetClass')} subtitle={t('investments.basedOnProcessedReconciledSells')}>
+          {pnlByAssetClassSeries.rows.length === 0 ? <p className="text-sm text-muted-foreground">{t('investments.noRealizedPnLYet')}</p> : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={pnlByAssetClassSeries.rows}>
@@ -886,8 +883,8 @@ export function InvestmentsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="Portfolio allocation by class" subtitle={`Total ${currency.format(totalCurrentValue)}`}>
-          {allocationByType.length === 0 ? <p className="text-sm text-muted-foreground">No holdings yet.</p> : (
+        <ChartCard title={t('investments.portfolioAllocationByClass')} subtitle={`${t('common.total')} ${currency.format(totalCurrentValue)}`}>
+          {allocationByType.length === 0 ? <p className="text-sm text-muted-foreground">{t('investments.noHoldingsYet')}</p> : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -902,67 +899,67 @@ export function InvestmentsPage() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Holdings">
+      <ChartCard title={t('investments.holdings')}>
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
-          <label className="text-sm sm:col-span-2">Investment account
+          <label className="text-sm sm:col-span-2">{t('investments.investmentAccountLabel')}
             <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={selectedAccountId ?? ''} onChange={(e)=>setSelectedAccountId(Number(e.target.value))}>
-              <option value="">Select account</option>
+              <option value="">{t('common.selectAccount')}</option>
               {accounts.map((account)=><option key={account.id} value={account.id}>{account.name}</option>)}
             </select>
           </label>
           <div className="sm:col-span-3 flex items-end text-sm text-muted-foreground">
-            {selectedAccount ? `${selectedAccount.name} • ${selectedAccount.broker_name ?? 'no broker'} • ${currency.format(selectedAccount.current_value)}` : 'Select account'}
+            {selectedAccount ? `${selectedAccount.name} • ${selectedAccount.broker_name ?? t('investments.noBroker')} • ${currency.format(selectedAccount.current_value)}` : t('common.selectAccount')}
           </div>
         </div>
 
         <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <label className="text-sm">Asset class
+          <label className="text-sm">{t('investments.assetClass')}
             <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.asset_type} onChange={(e)=>setNewHolding(c=>({...c,asset_type:e.target.value as Holding['asset_type'],fund_cnpj:e.target.value==='fund'?c.fund_cnpj:''}))}>
-              {ASSET_TYPE_OPTIONS.map((option)=><option key={option.value} value={option.value}>{option.label}</option>)}
+              {ASSET_TYPE_OPTIONS.map((option)=><option key={option.value} value={option.value}>{t(option.labelKey)}</option>)}
             </select>
           </label>
-          <label className="text-sm">Symbol/Ticker
+          <label className="text-sm">{t('investments.symbolTicker')}
             <input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.symbol} onChange={(e)=>setNewHolding(c=>({...c,symbol:e.target.value.toUpperCase()}))}/>
           </label>
-          <label className="text-sm">Name
+          <label className="text-sm">{t('common.name')}
             <input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.name} onChange={(e)=>setNewHolding(c=>({...c,name:e.target.value}))}/>
           </label>
-          <label className="text-sm">Source account (buy)
+          <label className="text-sm">{t('investments.sourceAccountBuy')}
             <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.sourceAccountId} onChange={(e)=>setNewHolding(c=>({...c,sourceAccountId:e.target.value}))}>
-              <option value="">Select account</option>
+              <option value="">{t('common.selectAccount')}</option>
               {bankAccounts.map((acc)=><option key={acc.id} value={acc.id}>{acc.name}</option>)}
             </select>
           </label>
           {newHolding.asset_type === 'fund' ? (
-            <label className="text-sm">Fund CNPJ
+            <label className="text-sm">{t('investments.fundCnpj')}
               <input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.fund_cnpj} onChange={(e)=>setNewHolding(c=>({...c,fund_cnpj:e.target.value}))} />
             </label>
           ) : null}
-          <label className="text-sm">Quantity
+          <label className="text-sm">{t('investments.quantity')}
             <input type="number" step="0.000001" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.quantity} onChange={(e)=>setNewHolding(c=>({...c,quantity:e.target.value}))}/>
           </label>
-          <label className="text-sm">Average cost
+          <label className="text-sm">{t('investments.averageCost')}
             <input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.average_cost} onChange={(e)=>setNewHolding(c=>({...c,average_cost:e.target.value}))}/>
           </label>
-          <label className="text-sm">Current price
+          <label className="text-sm">{t('investments.currentPrice')}
             <input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={newHolding.current_price} onChange={(e)=>setNewHolding(c=>({...c,current_price:e.target.value}))}/>
           </label>
-          <div className="flex items-end"><Button className="w-full" onClick={()=>void createHolding()}>Add holding</Button></div>
+          <div className="flex items-end"><Button className="w-full" onClick={()=>void createHolding()}>{t('investments.addHolding')}</Button></div>
         </div>
 
-        {holdings.length === 0 ? <p className="text-sm text-muted-foreground">No holdings registered.</p> : (
+        {holdings.length === 0 ? <p className="text-sm text-muted-foreground">{t('investments.noHoldingsRegistered')}</p> : (
           <div className="space-y-2">
             {holdings.map((holding, index) => (
               <div key={holding.id} className={index % 2 === 1 ? 'rounded-md bg-secondary/20 px-3 py-2 text-sm' : 'px-3 py-2 text-sm'}>
                 <div className="grid grid-cols-12 items-center gap-2">
                   <div className="col-span-2 font-medium">{holding.symbol}</div>
-                  <div className="col-span-2 text-muted-foreground">{ASSET_TYPE_OPTIONS.find((o)=>o.value===holding.asset_type)?.label}</div>
+                  <div className="col-span-2 text-muted-foreground">{ASSET_TYPE_OPTIONS.find((o)=>o.value===holding.asset_type) ? t(ASSET_TYPE_OPTIONS.find((o)=>o.value===holding.asset_type)!.labelKey) : '-'}</div>
                   <div className="col-span-2 text-muted-foreground">{holding.fund_cnpj || '-'}</div>
                   <div className="col-span-2 text-right">{holding.quantity}</div>
                   <div className="col-span-2 text-right">{currency.format(holding.current_value)}</div>
                   <div className="col-span-2 flex justify-end gap-1">
                     <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border" onClick={()=>openHoldingEdit(holding)}><Pencil className="h-4 w-4"/></button>
-                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border" onClick={()=>openSellModal(holding)}>Sell</button>
+                    <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border" onClick={()=>openSellModal(holding)}>{t('investments.sell')}</button>
                     <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border" onClick={()=>void deleteHolding(holding)}><Trash2 className="h-4 w-4"/></button>
                   </div>
                 </div>
@@ -972,63 +969,67 @@ export function InvestmentsPage() {
         )}
       </ChartCard>
 
-      <ChartCard title="Investment schedules" subtitle="Single or recurring buy/sell entries for account planning">
+      <ChartCard title={t('investments.investmentSchedules')} subtitle={t('investments.investmentSchedulesSubtitle')}>
         <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <label className="text-sm">Direction
+          <label className="text-sm">{t('investments.direction')}
             <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.direction} onChange={(e)=>setScheduleForm(c=>({...c,direction:e.target.value as 'buy'|'sell'}))}>
-              <option value="buy">Buy (debit bank)</option>
-              <option value="sell">Sell (credit bank)</option>
+              <option value="buy">{t('investments.buyDebitBank')}</option>
+              <option value="sell">{t('investments.sellCreditBank')}</option>
             </select>
           </label>
-          <label className="text-sm">Mode
+          <label className="text-sm">{t('investments.mode')}
             <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.mode} onChange={(e)=>setScheduleForm(c=>({...c,mode:e.target.value as 'one_time'|'recurring'}))}>
-              <option value="one_time">One-time</option>
-              <option value="recurring">Recurring</option>
+              <option value="one_time">{t('investments.oneTime')}</option>
+              <option value="recurring">{t('investments.recurring')}</option>
             </select>
           </label>
-          <label className="text-sm">Bank account
+          <label className="text-sm">{t('common.bankAccount')}
             <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.bankAccountId} onChange={(e)=>setScheduleForm(c=>({...c,bankAccountId:e.target.value}))}>
-              <option value="">Select account</option>
+              <option value="">{t('common.selectAccount')}</option>
               {bankAccounts.map((acc)=><option key={acc.id} value={acc.id}>{acc.name}</option>)}
             </select>
           </label>
-          <label className="text-sm">Amount
+          <label className="text-sm">{t('common.amount')}
             <input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.amount} onChange={(e)=>setScheduleForm(c=>({...c,amount:e.target.value}))}/>
           </label>
           {scheduleForm.direction === 'sell' ? (
-            <label className="text-sm">Paid taxes
+            <label className="text-sm">{t('investments.paidTaxes')}
               <input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.paidTax} onChange={(e)=>setScheduleForm(c=>({...c,paidTax:e.target.value}))}/>
             </label>
           ) : null}
-          <label className="text-sm sm:col-span-2">Description
+          <label className="text-sm sm:col-span-2">{t('common.description')}
             <input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.description} onChange={(e)=>setScheduleForm(c=>({...c,description:e.target.value}))}/>
           </label>
-          <label className="text-sm">Date
+          <label className="text-sm">{t('common.date')}
             <input type="date" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.date} onChange={(e)=>setScheduleForm(c=>({...c,date:e.target.value}))}/>
           </label>
           {scheduleForm.mode === 'recurring' ? (
             <>
-              <label className="text-sm">Frequency
+              <label className="text-sm">{t('fab.frequency')}
                 <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.frequency} onChange={(e)=>setScheduleForm(c=>({...c,frequency:e.target.value}))}>
-                  <option value="monthly">monthly</option><option value="weekly">weekly</option><option value="daily">daily</option><option value="quarterly">quarterly</option><option value="yearly">yearly</option>
+                  <option value="monthly">{t('fab.monthly')}</option>
+                  <option value="weekly">{t('fab.weekly')}</option>
+                  <option value="daily">{t('fab.daily')}</option>
+                  <option value="quarterly">{t('fab.quarterly')}</option>
+                  <option value="yearly">{t('fab.yearly')}</option>
                 </select>
               </label>
-              <label className="text-sm">Count
+              <label className="text-sm">{t('investments.count')}
                 <input type="number" min="1" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleForm.count} onChange={(e)=>setScheduleForm(c=>({...c,count:e.target.value}))}/>
               </label>
             </>
           ) : null}
-          <div className="flex items-end"><Button className="w-full" onClick={()=>void createSchedule()}>Create schedule</Button></div>
+          <div className="flex items-end"><Button className="w-full" onClick={()=>void createSchedule()}>{t('investments.createSchedule')}</Button></div>
         </div>
-        {schedules.length === 0 ? <p className="text-sm text-muted-foreground">No schedules for this investment account.</p> : (
+        {schedules.length === 0 ? <p className="text-sm text-muted-foreground">{t('investments.noSchedulesForAccount')}</p> : (
           <div className="space-y-2">
             {schedules.map((row, index) => (
               <div key={row.row_id} className={index % 2 === 1 ? 'rounded-md bg-secondary/20 px-3 py-2 text-sm' : 'px-3 py-2 text-sm'}>
                 <div className="grid grid-cols-12 items-center gap-2">
                   <div className="col-span-3">{row.description}</div>
                   <div className="col-span-2 text-muted-foreground">{row.due_date}</div>
-                  <div className="col-span-2 text-muted-foreground">{row.direction}</div>
-                  <div className="col-span-2 text-muted-foreground">{row.status}</div>
+                  <div className="col-span-2 text-muted-foreground">{row.direction === 'buy' ? t('investments.buy') : t('investments.sellDirection')}</div>
+                  <div className="col-span-2 text-muted-foreground">{(row.status ?? '') ? t(`status.${(row.status ?? '').toLowerCase()}`, (row.status ?? '')) : '-'}</div>
                   <div className="col-span-2 text-right">{currency.format(row.amount)}</div>
                   <div className="col-span-1 flex justify-end">
                     <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border" onClick={()=>openScheduleEdit(row)}><Pencil className="h-4 w-4"/></button>
@@ -1043,25 +1044,25 @@ export function InvestmentsPage() {
       {holdingEditing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">Edit holding</h3>
+            <h3 className="text-lg font-semibold">{t('investments.editHolding')}</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-sm">Symbol<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.symbol} onChange={(e)=>setHoldingEditForm(c=>({...c,symbol:e.target.value.toUpperCase()}))}/></label>
-              <label className="text-sm">Name<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.name} onChange={(e)=>setHoldingEditForm(c=>({...c,name:e.target.value}))}/></label>
-              <label className="text-sm">Asset class
+              <label className="text-sm">{t('investments.symbol')}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.symbol} onChange={(e)=>setHoldingEditForm(c=>({...c,symbol:e.target.value.toUpperCase()}))}/></label>
+              <label className="text-sm">{t('common.name')}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.name} onChange={(e)=>setHoldingEditForm(c=>({...c,name:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.assetClass')}
                 <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.asset_type} onChange={(e)=>setHoldingEditForm(c=>({...c,asset_type:e.target.value as Holding['asset_type']}))}>
-                  {ASSET_TYPE_OPTIONS.map((opt)=><option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  {ASSET_TYPE_OPTIONS.map((opt)=><option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>)}
                 </select>
               </label>
               {holdingEditForm.asset_type === 'fund' ? (
-                <label className="text-sm">Fund CNPJ<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.fund_cnpj} onChange={(e)=>setHoldingEditForm(c=>({...c,fund_cnpj:e.target.value}))}/></label>
+                <label className="text-sm">{t('investments.fundCnpj')}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.fund_cnpj} onChange={(e)=>setHoldingEditForm(c=>({...c,fund_cnpj:e.target.value}))}/></label>
               ) : null}
-              <label className="text-sm">Quantity<input type="number" step="0.000001" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.quantity} onChange={(e)=>setHoldingEditForm(c=>({...c,quantity:e.target.value}))}/></label>
-              <label className="text-sm">Average cost<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.average_cost} onChange={(e)=>setHoldingEditForm(c=>({...c,average_cost:e.target.value}))}/></label>
-              <label className="text-sm">Current price<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.current_price} onChange={(e)=>setHoldingEditForm(c=>({...c,current_price:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.quantity')}<input type="number" step="0.000001" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.quantity} onChange={(e)=>setHoldingEditForm(c=>({...c,quantity:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.averageCost')}<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.average_cost} onChange={(e)=>setHoldingEditForm(c=>({...c,average_cost:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.currentPrice')}<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={holdingEditForm.current_price} onChange={(e)=>setHoldingEditForm(c=>({...c,current_price:e.target.value}))}/></label>
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <Button variant="outline" onClick={()=>setHoldingEditing(null)}>Cancel</Button>
-              <Button onClick={()=>void saveHoldingEdit()}>Save</Button>
+              <Button variant="outline" onClick={()=>setHoldingEditing(null)}>{t('common.cancel')}</Button>
+              <Button onClick={()=>void saveHoldingEdit()}>{t('common.save')}</Button>
             </div>
           </div>
         </div>
@@ -1072,22 +1073,22 @@ export function InvestmentsPage() {
           <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
             <h3 className="text-lg font-semibold">Sell {sellHolding.symbol}</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-sm">Quantity<input type="number" step="0.000001" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.quantity} onChange={(e)=>setSellForm(c=>({...c,quantity:e.target.value}))}/></label>
-              <label className="text-sm">Unit price<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.unitPrice} onChange={(e)=>setSellForm(c=>({...c,unitPrice:e.target.value}))}/></label>
-              <label className="text-sm">Paid taxes<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.paidTax} onChange={(e)=>setSellForm(c=>({...c,paidTax:e.target.value}))}/></label>
-              <label className="text-sm">Destination bank account
+              <label className="text-sm">{t('investments.quantity')}<input type="number" step="0.000001" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.quantity} onChange={(e)=>setSellForm(c=>({...c,quantity:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.unitPrice')}<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.unitPrice} onChange={(e)=>setSellForm(c=>({...c,unitPrice:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.paidTaxes')}<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.paidTax} onChange={(e)=>setSellForm(c=>({...c,paidTax:e.target.value}))}/></label>
+              <label className="text-sm">{t('investments.destinationBankAccount')}
                 <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.destinationAccountId} onChange={(e)=>setSellForm(c=>({...c,destinationAccountId:e.target.value}))}>
-                  <option value="">Select account</option>
+                  <option value="">{t('common.selectAccount')}</option>
                   {bankAccounts.map((acc)=><option key={acc.id} value={acc.id}>{acc.name}</option>)}
                 </select>
               </label>
-              <label className="text-sm">Date<input type="date" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.date} onChange={(e)=>setSellForm(c=>({...c,date:e.target.value}))}/></label>
-              <label className="text-sm sm:col-span-2">Description<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.description} onChange={(e)=>setSellForm(c=>({...c,description:e.target.value}))}/></label>
+              <label className="text-sm">{t('common.date')}<input type="date" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.date} onChange={(e)=>setSellForm(c=>({...c,date:e.target.value}))}/></label>
+              <label className="text-sm sm:col-span-2">{t('common.description')}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={sellForm.description} onChange={(e)=>setSellForm(c=>({...c,description:e.target.value}))}/></label>
               <p className="text-xs text-muted-foreground sm:col-span-2">Sell note stores principal, gross proceeds, tax, and realized profit for tax reporting.</p>
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <Button variant="outline" onClick={()=>setSellHolding(null)}>Cancel</Button>
-              <Button onClick={()=>void confirmSell()}>Confirm sell</Button>
+              <Button variant="outline" onClick={()=>setSellHolding(null)}>{t('common.cancel')}</Button>
+              <Button onClick={()=>void confirmSell()}>{t('investments.confirmSell')}</Button>
             </div>
           </div>
         </div>
@@ -1107,28 +1108,32 @@ export function InvestmentsPage() {
               </label>
             ) : null}
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="text-sm sm:col-span-2">Description<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.description} onChange={(e)=>setScheduleEditForm(c=>({...c,description:e.target.value}))}/></label>
-              <label className="text-sm">Amount<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.amount} onChange={(e)=>setScheduleEditForm(c=>({...c,amount:e.target.value}))}/></label>
-              <label className="text-sm">Date<input type="date" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.date} onChange={(e)=>setScheduleEditForm(c=>({...c,date:e.target.value}))}/></label>
-              <label className="text-sm">Status
+              <label className="text-sm sm:col-span-2">{t('common.description')}<input className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.description} onChange={(e)=>setScheduleEditForm(c=>({...c,description:e.target.value}))}/></label>
+              <label className="text-sm">{t('common.amount')}<input type="number" step="0.01" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.amount} onChange={(e)=>setScheduleEditForm(c=>({...c,amount:e.target.value}))}/></label>
+              <label className="text-sm">{t('common.date')}<input type="date" className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.date} onChange={(e)=>setScheduleEditForm(c=>({...c,date:e.target.value}))}/></label>
+              <label className="text-sm">{t('common.statusLabel')}
                 <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.status} onChange={(e)=>setScheduleEditForm(c=>({...c,status:e.target.value}))}>
-                  <option value="pending">pending</option><option value="processed">processed</option><option value="reconciled">reconciled</option><option value="scheduled">scheduled</option><option value="cancelled">cancelled</option>
+                  <option value="pending">{t('status.pending')}</option>
+                  <option value="processed">{t('status.processed')}</option>
+                  <option value="reconciled">{t('status.reconciled')}</option>
+                  <option value="scheduled">{t('status.scheduled')}</option>
+                  <option value="cancelled">{t('status.cancelled')}</option>
                 </select>
               </label>
-              <label className="text-sm">Bank account
+              <label className="text-sm">{t('common.bankAccount')}
                 <select className="mt-1 w-full rounded-md border bg-background px-3 py-2" value={scheduleEditForm.bankAccountId} onChange={(e)=>setScheduleEditForm(c=>({...c,bankAccountId:e.target.value}))}>
-                  <option value="">Select account</option>
+                  <option value="">{t('common.selectAccount')}</option>
                   {bankAccounts.map((acc)=><option key={acc.id} value={acc.id}>{acc.name}</option>)}
                 </select>
               </label>
             </div>
             <div className="mt-5 flex items-center justify-between">
               <button type="button" className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-2 text-red-600 hover:bg-red-50" onClick={()=>void deleteSchedule(editingSchedule)}>
-                <Trash2 className="h-4 w-4"/>Delete
+                <Trash2 className="h-4 w-4"/>{t('common.delete')}
               </button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={()=>setEditingSchedule(null)}>Cancel</Button>
-                <Button onClick={()=>void saveScheduleEdit()}>Save</Button>
+                <Button variant="outline" onClick={()=>setEditingSchedule(null)}>{t('common.cancel')}</Button>
+                <Button onClick={()=>void saveScheduleEdit()}>{t('common.save')}</Button>
               </div>
             </div>
           </div>

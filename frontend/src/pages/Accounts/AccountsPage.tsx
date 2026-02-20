@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowUpDown, Check, Pencil, Trash2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useMonthContext } from '@/app/providers/MonthContextProvider'
 import { ChartCard } from '@/components/common/ChartCard'
@@ -22,6 +22,8 @@ type BankAccount = {
   balance: number
   account_type: string
   bank_name?: string | null
+  account_number_last4?: string | null
+  currency?: string
   color?: string | null
 }
 
@@ -46,7 +48,7 @@ const toYmd = (value: Date) =>
 
 export function AccountsPage() {
   const { currentMonth } = useMonthContext()
-  const navigate = useNavigate()
+  const { t } = useTranslation()
   const [accounts, setAccounts] = useState<BankAccount[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -72,6 +74,16 @@ export function AccountsPage() {
   const [tags, setTags] = useState<Array<{ id: number; name: string }>>([])
   const [editTagIds, setEditTagIds] = useState<number[]>([])
   const [recurringScope, setRecurringScope] = useState<'only_event' | 'from_event_forward' | 'all_events'>('only_event')
+  const [editingBankAccount, setEditingBankAccount] = useState<BankAccount | null>(null)
+  const [editBankForm, setEditBankForm] = useState({
+    name: '',
+    account_type: 'checking' as 'checking' | 'savings' | 'money_market' | 'other',
+    bank_name: '',
+    account_number_last4: '',
+    balance: '0',
+    currency: 'USD',
+    color: '#6366F1',
+  })
 
   const loadData = async () => {
     setLoading(true)
@@ -95,6 +107,8 @@ export function AccountsPage() {
         balance: unknown
         account_type: string
         bank_name?: string
+        account_number_last4?: string | null
+        currency?: string
         color?: string | null
       }>
       const accountData: BankAccount[] = rawAccounts.map((account) => ({
@@ -103,6 +117,8 @@ export function AccountsPage() {
         balance: Number(account.balance),
         account_type: account.account_type,
         bank_name: account.bank_name,
+        account_number_last4: account.account_number_last4 ?? null,
+        currency: account.currency ?? 'USD',
         color: account.color ?? undefined,
       }))
       setAccounts(accountData)
@@ -657,15 +673,58 @@ export function AccountsPage() {
     }
   }
 
+  const openBankEditModal = (account: BankAccount) => {
+    const rawType = (account.account_type ?? 'checking').toLowerCase()
+    const accountType: 'checking' | 'savings' | 'money_market' | 'other' =
+      rawType === 'savings' || rawType === 'money_market' || rawType === 'other' ? rawType : 'checking'
+    setEditingBankAccount(account)
+    setEditBankForm({
+      name: account.name ?? '',
+      account_type: accountType,
+      bank_name: account.bank_name ?? '',
+      account_number_last4: account.account_number_last4 ?? '',
+      balance: String(account.balance ?? 0),
+      currency: account.currency ?? 'USD',
+      color: account.color ?? '#6366F1',
+    })
+  }
+
+  const saveBankEdit = async () => {
+    if (!editingBankAccount) return
+    setError(null)
+    try {
+      const response = await fetch(`${API_BASE_URL}/bank-accounts/${editingBankAccount.id}?user_id=${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editBankForm.name,
+          account_type: editBankForm.account_type,
+          bank_name: editBankForm.bank_name || null,
+          account_number_last4: editBankForm.account_number_last4 || null,
+          balance: Number(editBankForm.balance),
+          currency: editBankForm.currency || 'USD',
+          color: editBankForm.color || null,
+        }),
+      })
+      if (!response.ok) throw new Error('Failed to update bank account.')
+      setEditingBankAccount(null)
+      setNotice('Bank account updated.')
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bank account update failed.')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <SectionHeader
-          title="Accounts"
+          title={t('accounts.title')}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <label className="sr-only" htmlFor="account-select">
-                Account
+                {t('accounts.account')}
               </label>
               <select
                 id="account-select"
@@ -681,7 +740,7 @@ export function AccountsPage() {
               </select>
               <MonthNavigator />
               <Button variant="outline" size="sm" onClick={() => void loadData()}>
-                Refresh
+                {t('common.refresh')}
               </Button>
             </div>
           }
@@ -691,12 +750,12 @@ export function AccountsPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:col-span-2">
           {balanceHistory12Mo.length > 0 && (
-            <div className="absolute inset-0 opacity-20">
+            <div className="absolute inset-0 opacity-60">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={balanceHistory12Mo} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                   <defs>
                     <linearGradient id="bank-card-bg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={selectedAccount?.color ?? CHART_THEME.series.balance} stopOpacity={0.4} />
+                      <stop offset="0%" stopColor={selectedAccount?.color ?? CHART_THEME.series.balance} stopOpacity={0.6} />
                       <stop offset="100%" stopColor={selectedAccount?.color ?? CHART_THEME.series.balance} stopOpacity={0} />
                     </linearGradient>
                   </defs>
@@ -713,7 +772,13 @@ export function AccountsPage() {
                 <p className="mt-2 text-xs text-amber-700">Statement includes unassigned transactions.</p>
               ) : null}
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate('/settings')} aria-label="Edit bank account">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={() => selectedAccount && openBankEditModal(selectedAccount)}
+              aria-label="Edit bank account"
+            >
               <Pencil className="h-4 w-4" />
             </Button>
           </div>
@@ -731,14 +796,14 @@ export function AccountsPage() {
         </div>
       </div>
 
-      {loading ? <p className="text-sm text-muted-foreground">Loading account statement...</p> : null}
+      {loading ? <p className="text-sm text-muted-foreground">{t('accounts.loadingStatement')}</p> : null}
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
       {notice ? <p className="text-sm text-emerald-600">{notice}</p> : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ChartCard title="Account balance health" subtitle="Running balance and daily expenses">
+        <ChartCard title={t('common.accountBalanceHealth')} subtitle={t('common.runningBalanceAndDailyExpenses')}>
           {runningBalanceSeries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No transactions in this month for selected account.</p>
+            <p className="text-sm text-muted-foreground">{t('common.noTransactionsInMonth')}</p>
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -759,7 +824,7 @@ export function AccountsPage() {
                   <Tooltip
                     formatter={(value: number | string, name: string) => [
                       currency.format(Number(value)),
-                      name === 'balance' ? 'Balance' : 'Daily expenses',
+                      name === 'balance' ? t('common.balance') : t('common.dailyExpenses'),
                     ]}
                   />
                   <Area
@@ -767,7 +832,7 @@ export function AccountsPage() {
                     dataKey="balance"
                     stroke={CHART_THEME.series.balance}
                     fill="url(#account-balance-gradient)"
-                    name="Balance"
+                    name={t('common.balance')}
                   />
                   <Area
                     type="monotone"
@@ -775,7 +840,7 @@ export function AccountsPage() {
                     stroke={CHART_THEME.series.expenses}
                     fill="url(#account-expenses-gradient)"
                     strokeWidth={2}
-                    name="Daily expenses"
+                    name={t('common.dailyExpenses')}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -783,9 +848,9 @@ export function AccountsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="Inflow vs outflow" subtitle={`Inflow ${currency.format(totals.inflow)} • Outflow ${currency.format(totals.outflow)}`}>
+        <ChartCard title={t('common.inflowVsOutflow')} subtitle={`${t('common.inflow')} ${currency.format(totals.inflow)} • ${t('common.outflow')} ${currency.format(totals.outflow)}`}>
           {cashflowSeries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No cashflow points in selected month.</p>
+            <p className="text-sm text-muted-foreground">{t('common.noCashflowPoints')}</p>
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -825,16 +890,16 @@ export function AccountsPage() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Transfer between accounts" subtitle="Create a one-time transfer transaction">
+      <ChartCard title={t('common.transferBetweenAccounts')} subtitle={t('common.createOneTimeTransfer')}>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-sm">
-            Destination
+            {t('common.destination')}
             <select
               value={transferToId ?? ''}
               onChange={(event) => setTransferToId(Number(event.target.value))}
               className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm"
             >
-              <option value="">Select account</option>
+              <option value="">{t('common.selectAccount')}</option>
               {accounts
                 .filter((account) => account.id !== selectedAccountId)
                 .map((account) => (
@@ -845,7 +910,7 @@ export function AccountsPage() {
             </select>
           </label>
           <label className="text-sm">
-            Amount
+            {t('common.amount')}
             <input
               type="number"
               min="0"
@@ -856,7 +921,7 @@ export function AccountsPage() {
             />
           </label>
           <label className="text-sm">
-            Description
+            {t('common.description')}
             <input
               type="text"
               value={transferDescription}
@@ -864,21 +929,21 @@ export function AccountsPage() {
               className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm"
             />
           </label>
-          <Button onClick={() => void createTransfer()}>Create transfer</Button>
+          <Button onClick={() => void createTransfer()}>{t('common.createTransfer')}</Button>
         </div>
       </ChartCard>
 
       <ChartCard
-        title="Account statement"
-        subtitle={`${statementPayments.length} transactions in selected month`}
+        title={t('common.accountStatement')}
+        subtitle={t('common.transactionsCount', { count: statementPayments.length })}
         titleAction={
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Sort</span>
+            <span className="text-xs text-muted-foreground">{t('common.sort')}</span>
             <button
               type="button"
               onClick={() => setSortOrder((o) => (o === 'older' ? 'newer' : 'older'))}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background hover:bg-muted"
-              aria-label={sortOrder === 'older' ? 'Newer first' : 'Older first'}
+              aria-label={sortOrder === 'older' ? t('common.newerFirst') : t('common.olderFirst')}
             >
               <ArrowUpDown className="h-4 w-4" />
             </button>
@@ -886,7 +951,7 @@ export function AccountsPage() {
         }
       >
         {statementGroupedByDate.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No transactions available for selected period.</p>
+          <p className="text-sm text-muted-foreground">{t('common.noTransactionsForPeriod')}</p>
         ) : (
           <div className="space-y-2">
             {statementGroupedByDate.map((group, groupIndex) => (
@@ -897,7 +962,7 @@ export function AccountsPage() {
                 </div>
                 <div className="space-y-1">
                   {group.items.length === 0 ? (
-                    <div className="px-2 py-1 text-xs text-muted-foreground">Carried over from previous month.</div>
+                    <div className="px-2 py-1 text-xs text-muted-foreground">{t('common.carriedOver')}</div>
                   ) : null}
                   {group.items.map((payment) => {
                     const signed = selectedAccountId ? getSignedAmount(payment, selectedAccountId) : payment.amount
@@ -906,14 +971,14 @@ export function AccountsPage() {
                       <div key={payment.id} className="grid grid-cols-12 items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-background/60">
                         <div className="col-span-4 truncate">{payment.description}</div>
                         <div className="col-span-2 text-muted-foreground">{categories.find((item) => item.id === payment.category_id)?.name ?? '-'}</div>
-                        <div className="col-span-2 text-muted-foreground">{payment.status ?? '-'}</div>
+                        <div className="col-span-2 text-muted-foreground">{(payment.status ?? '') ? t(`status.${(payment.status ?? '').toLowerCase()}`, (payment.status ?? '')) : '-'}</div>
                         <div className={`col-span-2 text-right ${signed >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                           {currency.format(Math.abs(signed))}
                         </div>
                         <div className="col-span-2 flex justify-end gap-1">
                           <button
                             type="button"
-                            aria-label={isReconciled ? 'Move to pending' : 'Confirm transaction'}
+                            aria-label={isReconciled ? t('common.moveToPending') : t('common.confirmTransaction')}
                             className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${isReconciled ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-card'}`}
                             onClick={() => void confirmPayment(payment.id)}
                           >
@@ -921,7 +986,7 @@ export function AccountsPage() {
                           </button>
                           <button
                             type="button"
-                            aria-label="Edit transaction"
+                            aria-label={t('common.editTransaction')}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-card"
                             onClick={() => openEditModal(payment)}
                           >
@@ -938,13 +1003,102 @@ export function AccountsPage() {
         )}
       </ChartCard>
 
+      {editingBankAccount ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">Edit bank account</h3>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-sm sm:col-span-2">
+                Name
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editBankForm.name}
+                  onChange={(e) => setEditBankForm((c) => ({ ...c, name: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Type
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editBankForm.account_type}
+                  onChange={(e) =>
+                    setEditBankForm((c) => ({ ...c, account_type: e.target.value as 'checking' | 'savings' | 'money_market' | 'other' }))
+                  }
+                >
+                  <option value="checking">Checking</option>
+                  <option value="savings">Savings</option>
+                  <option value="money_market">Money market</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                Bank name
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editBankForm.bank_name}
+                  onChange={(e) => setEditBankForm((c) => ({ ...c, bank_name: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Last 4 digits
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editBankForm.account_number_last4}
+                  onChange={(e) => setEditBankForm((c) => ({ ...c, account_number_last4: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Balance
+                <input
+                  type="number"
+                  step="0.01"
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editBankForm.balance}
+                  onChange={(e) => setEditBankForm((c) => ({ ...c, balance: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm">
+                Currency
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editBankForm.currency}
+                  onChange={(e) => setEditBankForm((c) => ({ ...c, currency: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                Color
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="color"
+                    className="h-9 w-14 cursor-pointer rounded border bg-background"
+                    value={editBankForm.color}
+                    onChange={(e) => setEditBankForm((c) => ({ ...c, color: e.target.value }))}
+                  />
+                  <input
+                    className="w-24 rounded-md border bg-background px-2 py-1.5 text-sm"
+                    value={editBankForm.color}
+                    onChange={(e) => setEditBankForm((c) => ({ ...c, color: e.target.value }))}
+                  />
+                </div>
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingBankAccount(null)}>
+                Cancel
+              </Button>
+              <Button onClick={() => void saveBankEdit()}>Save</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {editingPayment ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">Edit transaction</h3>
+            <h3 className="text-lg font-semibold">{t('common.editTransaction')}</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="text-sm sm:col-span-2">
-                Description
+                {t('common.description')}
                 <input
                   type="text"
                   value={editForm.description}
@@ -954,7 +1108,7 @@ export function AccountsPage() {
               </label>
               {editingPayment.occurrence_id && editingPayment.payment_type === 'recurring' ? (
                 <label className="text-sm sm:col-span-2">
-                  Recurring scope
+                  {t('common.recurringScopeLabel')}
                   <select
                     value={recurringScope}
                     onChange={(event) =>
@@ -962,14 +1116,14 @@ export function AccountsPage() {
                     }
                     className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                   >
-                    <option value="only_event">Only this event</option>
-                    <option value="from_event_forward">From this event forward</option>
-                    <option value="all_events">All events</option>
+                    <option value="only_event">{t('common.recurringScopeOnlyEvent')}</option>
+                    <option value="from_event_forward">{t('common.recurringScopeFromForward')}</option>
+                    <option value="all_events">{t('common.recurringScopeAllEvents')}</option>
                   </select>
                 </label>
               ) : null}
               <label className="text-sm">
-                Date
+                {t('common.date')}
                 <input
                   type="date"
                   value={editForm.due_date}
@@ -978,7 +1132,7 @@ export function AccountsPage() {
                 />
               </label>
               <label className="text-sm">
-                Value
+                {t('common.amount')}
                 <input
                   type="number"
                   step="0.01"
@@ -988,7 +1142,7 @@ export function AccountsPage() {
                 />
               </label>
               <label className="text-sm">
-                Transaction type
+                {t('common.transactionType')}
                 <select
                   value={editForm.transactionType}
                   onChange={(event) =>
@@ -999,15 +1153,13 @@ export function AccountsPage() {
                   }
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  {(['expense', 'income', 'transfer'] as TransactionType[]).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                  <option value="expense">{t('settings.expense')}</option>
+                  <option value="income">{t('settings.income')}</option>
+                  <option value="transfer">{t('settings.transfer')}</option>
                 </select>
               </label>
               <label className="text-sm">
-                Category
+                {t('common.category')}
                 <select
                   value={editForm.categoryChild}
                   onChange={(event) => setEditForm((current) => ({ ...current, categoryChild: event.target.value }))}
@@ -1024,7 +1176,7 @@ export function AccountsPage() {
                 </select>
               </label>
               <label className="text-sm sm:col-span-2">
-                Tags
+                {t('common.tags')}
                 <select
                   multiple
                   value={editTagIds.map(String)}
@@ -1042,21 +1194,21 @@ export function AccountsPage() {
                 </select>
               </label>
               <label className="text-sm">
-                Status
+                {t('common.statusLabel')}
                 <select
                   value={editForm.status}
                   onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value }))}
                   className="mt-1 w-full rounded-md border bg-background px-3 py-2"
                 >
-                  <option value="pending">pending</option>
-                  <option value="processed">processed</option>
-                  <option value="reconciled">reconciled</option>
-                  <option value="scheduled">scheduled</option>
-                  <option value="cancelled">cancelled</option>
+                  <option value="pending">{t('status.pending')}</option>
+                  <option value="processed">{t('status.processed')}</option>
+                  <option value="reconciled">{t('status.reconciled')}</option>
+                  <option value="scheduled">{t('status.scheduled')}</option>
+                  <option value="cancelled">{t('status.cancelled')}</option>
                 </select>
               </label>
               <label className="text-sm sm:col-span-2">
-                Notes
+                {t('common.notes')}
                 <textarea
                   value={editForm.notes}
                   onChange={(event) => setEditForm((current) => ({ ...current, notes: event.target.value }))}
@@ -1073,13 +1225,13 @@ export function AccountsPage() {
                 onClick={() => void deletePayment(editingPayment.id)}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete
+                {t('common.delete')}
               </button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setEditingPayment(null)}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
-                <Button onClick={() => void saveEdit()}>Save</Button>
+                <Button onClick={() => void saveEdit()}>{t('common.save')}</Button>
               </div>
             </div>
           </div>

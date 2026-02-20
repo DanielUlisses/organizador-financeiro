@@ -1,5 +1,6 @@
 import { CreditCard, Gauge, Landmark, LineChart, Settings, User, Wallet } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 
 type SidebarProps = {
@@ -8,18 +9,19 @@ type SidebarProps = {
   onCloseMobile: () => void
 }
 
-const links = [
-  { to: '/dashboard', label: 'Dashboard', icon: Gauge },
-  { to: '/accounts', label: 'Accounts', icon: Landmark },
-  { to: '/credit-cards', label: 'Credit Cards', icon: CreditCard },
-  { to: '/investments', label: 'Investments', icon: Wallet },
-  { to: '/investments/tax', label: 'Investments Tax', icon: Wallet },
-  { to: '/analytics', label: 'Analytics', icon: LineChart },
-  { to: '/settings', label: 'Settings', icon: Settings },
-  { to: '/profile', label: 'Profile', icon: User },
+const linkKeys = [
+  { to: '/dashboard', key: 'nav.dashboard', icon: Gauge },
+  { to: '/accounts', key: 'nav.accounts', icon: Landmark },
+  { to: '/credit-cards', key: 'nav.creditCards', icon: CreditCard },
+  { to: '/investments', key: 'nav.investments', icon: Wallet },
+  { to: '/investments/tax', key: 'nav.investmentsTax', icon: Wallet },
+  { to: '/analytics', key: 'nav.analytics', icon: LineChart },
+  { to: '/settings', key: 'nav.settings', icon: Settings },
+  { to: '/profile', key: 'nav.profile', icon: User },
 ]
 
 export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) {
+  const { t } = useTranslation()
   return (
     <>
       <div
@@ -44,11 +46,11 @@ export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) 
               decoding="async"
             />
           </span>
-          {!collapsed ? <span className="truncate text-sm font-semibold tracking-tight">Organizador Financeiro</span> : null}
+          {!collapsed ? <span className="truncate text-sm font-semibold tracking-tight">{t('common.appName')}</span> : null}
         </div>
-        <div className="px-3 pt-3 text-[10px] uppercase tracking-wide text-muted-foreground">{collapsed ? 'Nav' : 'Navigation'}</div>
+        <div className="px-3 pt-3 text-[10px] uppercase tracking-wide text-muted-foreground">{collapsed ? t('common.nav') : t('common.navigation')}</div>
         <nav className="space-y-1 p-2">
-          {links.map((link) => (
+          {linkKeys.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
@@ -62,13 +64,13 @@ export function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) 
               }
             >
               <link.icon className="h-4 w-4 shrink-0" />
-              {!collapsed ? <span>{link.label}</span> : null}
+              {!collapsed ? <span>{t(link.key)}</span> : null}
             </NavLink>
           ))}
         </nav>
         <div className="mt-auto p-3">
           <Button className="w-full" variant="outline" onClick={onCloseMobile}>
-            {collapsed ? '>' : 'Close'}
+            {collapsed ? '>' : t('common.close')}
           </Button>
         </div>
       </aside>

@@ -1,4 +1,4 @@
-.PHONY: help setup-backend setup-frontend setup-db start-db stop-db createdb migrate-up migrate-down start-backend start-frontend install prod-build prod-up prod-down prod-logs
+.PHONY: help setup-backend setup-frontend setup-db start-db stop-db createdb migrate-up migrate-down seed start-backend start-frontend install prod-build prod-up prod-down prod-logs
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -43,6 +43,9 @@ clean-db: ## Stop and remove PostgreSQL container and volumes (WARNING: deletes 
 
 migrate-up: ## Run database migrations
 	cd backend && alembic upgrade head
+
+seed: ## Create default user if none exist (run after migrate-up)
+	cd backend && .venv/bin/python scripts/seed_default_user.py
 
 migrate-down: ## Rollback last migration
 	cd backend && alembic downgrade -1
