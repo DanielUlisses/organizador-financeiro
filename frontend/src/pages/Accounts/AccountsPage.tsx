@@ -338,20 +338,20 @@ export function AccountsPage() {
   const monthStartKey = useMemo(() => toYmd(monthStart), [monthStart])
   const monthEndKey = useMemo(() => toYmd(monthEnd), [monthEnd])
   const carryOverBalance = useMemo(() => {
-    if (!selectedAccount || !selectedAccountId) return 0
-    // selectedAccount.balance representa o saldo consolidado atual; para obter o saldo de abertura
-    // do mês selecionado, removemos os lançamentos efetivados a partir do início do mês.
-    let rolling = selectedAccount.balance
+    if (!selectedAccountId) return 0
+    // Saldo de abertura do mês baseado apenas no ledger até o último dia do mês anterior.
+    // Isso evita drift visual quando o balance persistido diverge do histórico exibido.
+    let rolling = 0
     for (const payment of allAccountPayments) {
       const dueDateKey = normalizeDateKey(payment.due_date)
       if (!dueDateKey) continue
       const status = (payment.status ?? 'pending').toLowerCase()
       if (!EFFECTIVE_STATUSES.has(status)) continue
-      if (dueDateKey < monthStartKey) continue
-      rolling -= getSignedAmount(payment, selectedAccountId, false)
+      if (dueDateKey >= monthStartKey) continue
+      rolling += getSignedAmount(payment, selectedAccountId, false)
     }
     return rolling
-  }, [allAccountPayments, monthStartKey, selectedAccount, selectedAccountId])
+  }, [allAccountPayments, monthStartKey, selectedAccountId])
 
   const statementGroupedByDate = useMemo(() => {
     if (!selectedAccount || !selectedAccountId || statementPayments.length === 0) return []
