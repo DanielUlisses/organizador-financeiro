@@ -323,7 +323,107 @@
   },
   "analytics": {
     "title": "Análises",
-    "description": "Análises de saúde financeira e construtor de gráficos personalizados serão introduzidos em fases posteriores."
+    "description": "Análises de saúde financeira e construtor de gráficos personalizados serão introduzidos em fases posteriores.",
+    "subtitle": "Análise de despesas, receitas e investimentos com filtro por ano e projeções futuras planejadas.",
+    "errors": {
+      "loadFailed": "Falha ao carregar dados de análises."
+    },
+    "sections": {
+      "expenseTrends": "Tendência de despesas",
+      "expenseComposition": "Composição de despesas",
+      "categoryComparison": "Comparação por categoria",
+      "incomeExpensesTable": "Tabela receitas vs despesas",
+      "investmentAnalysis": "Análise de investimentos"
+    },
+    "filters": {
+      "year": "Ano",
+      "month": "Mês de referência",
+      "timeWindow": "Janela de comparação (meses)",
+      "expenseCategories": "Categorias de despesa"
+    },
+    "kpis": {
+      "expensesYear": "Despesas no ano",
+      "incomeYear": "Receitas no ano",
+      "investmentBalance": "Saldo de investimentos",
+      "investmentBalanceHint": "Saldo atual das contas de investimento selecionadas.",
+      "investmentNetFlowYear": "Fluxo líquido de investimentos no ano",
+      "projectedNet": "Líquido projetado",
+      "includesPlannedFuture": "Inclui valores planejados para meses futuros.",
+      "yearProjection": "Projeção anual com valores realizados e planejados."
+    },
+    "series": {
+      "realized": "Realizado",
+      "planned": "Planejado"
+    },
+    "timeframes": {
+      "monthly": "Mensal",
+      "semester": "Semestral",
+      "yearly": "Anual"
+    },
+    "expenseTrends": {
+      "title": "Despesas ao longo do tempo",
+      "subtitle": "Alterne entre visões mensal, semestral e anual."
+    },
+    "expenseComposition": {
+      "title": "Composição de despesas por categoria",
+      "subtitle": "Distribuição de despesas do mês selecionado por categoria.",
+      "legendTitle": "Totais por categoria"
+    },
+    "categoryComparison": {
+      "title": "Comparação de categorias em meses móveis",
+      "subtitle": "Compare categorias selecionadas nos últimos {{months}} meses."
+    },
+    "incomeExpensesTable": {
+      "title": "Receitas vs despesas por mês",
+      "subtitle": "Tabela de 12 meses com totais por categoria e líquido mensal."
+    },
+    "investmentAnalysis": {
+      "accountFilter": "Contas de investimento",
+      "growthTitle": "Evolução da carteira por conta de investimento",
+      "growthSubtitle": "Evolução acumulada das contas no ano selecionado.",
+      "balanceLine": "Linha de saldo de investimentos",
+      "currentBalance": "Saldo atual da conta"
+    },
+    "crossMetric": {
+      "title": "Correlação entre métricas",
+      "subtitle": "Compare receitas, despesas, categoria selecionada e saldo de investimentos na mesma linha do tempo.",
+      "category": "Categoria de despesa para comparação",
+      "investmentAccount": "Conta de investimento para comparação",
+      "allAccounts": "Todas as contas",
+      "series": {
+        "income": "Receitas",
+        "expenses": "Despesas",
+        "investmentBalance": "Saldo de investimentos",
+        "categoryExpense": "Despesas da categoria selecionada"
+      }
+    },
+    "custom": {
+      "title": "Construtor de gráfico personalizado",
+      "subtitle": "Selecione métricas e período, compare séries e salve presets para reutilizar.",
+      "window": "Janela de período (meses)",
+      "presetName": "Nome do preset",
+      "presetPlaceholder": "Exemplo: Fluxo de caixa vs carteira",
+      "savePreset": "Salvar",
+      "metrics": {
+        "income": "Receitas",
+        "expenses": "Despesas",
+        "net": "Líquido",
+        "investmentBalance": "Saldo de investimentos",
+        "investmentNetFlow": "Fluxo líquido de investimentos"
+      }
+    },
+    "table": {
+      "month": "Mês",
+      "category": "Categoria",
+      "incomesByCategory": "Receitas por categoria",
+      "incomeTotal": "Total de receitas",
+      "incomeSubtotal": "Subtotal de receitas",
+      "expensesByCategory": "Despesas por categoria",
+      "expenseTotal": "Total de despesas",
+      "expenseSubtotal": "Subtotal de despesas",
+      "net": "Líquido",
+      "netTotal": "Total líquido"
+    }
   },
   "settings": {
     "title": "Configurações",

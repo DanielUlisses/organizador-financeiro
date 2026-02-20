@@ -323,7 +323,107 @@
   },
   "analytics": {
     "title": "Analytics",
-    "description": "Cross-metric financial health analytics and custom chart builder will be introduced in later phases."
+    "description": "Cross-metric financial health analytics and custom chart builder will be introduced in later phases.",
+    "subtitle": "Expense, income, and investment analysis with year-based filters and future planned projections.",
+    "errors": {
+      "loadFailed": "Failed to load analytics data."
+    },
+    "sections": {
+      "expenseTrends": "Expense trends",
+      "expenseComposition": "Expense composition",
+      "categoryComparison": "Category comparison",
+      "incomeExpensesTable": "Income vs expenses table",
+      "investmentAnalysis": "Investment analysis"
+    },
+    "filters": {
+      "year": "Year",
+      "month": "Anchor month",
+      "timeWindow": "Comparison window (months)",
+      "expenseCategories": "Expense categories"
+    },
+    "kpis": {
+      "expensesYear": "Expenses in year",
+      "incomeYear": "Income in year",
+      "investmentBalance": "Investment balance",
+      "investmentBalanceHint": "Current balance of selected investment accounts.",
+      "investmentNetFlowYear": "Investment net flow in year",
+      "projectedNet": "Projected net",
+      "includesPlannedFuture": "Includes planned values for future months.",
+      "yearProjection": "Year projection using realized and planned values."
+    },
+    "series": {
+      "realized": "Realized",
+      "planned": "Planned"
+    },
+    "timeframes": {
+      "monthly": "Monthly",
+      "semester": "Semester",
+      "yearly": "Yearly"
+    },
+    "expenseTrends": {
+      "title": "Expenses over time",
+      "subtitle": "Switch between month, semester, and yearly views."
+    },
+    "expenseComposition": {
+      "title": "Expense composition by category",
+      "subtitle": "Breakdown of selected month expenses by category.",
+      "legendTitle": "Category totals"
+    },
+    "categoryComparison": {
+      "title": "Category comparison over rolling months",
+      "subtitle": "Compare selected categories across last {{months}} months."
+    },
+    "incomeExpensesTable": {
+      "title": "Income vs expenses by month",
+      "subtitle": "12-month table with category totals and monthly net."
+    },
+    "investmentAnalysis": {
+      "accountFilter": "Investment accounts",
+      "growthTitle": "Portfolio growth by investment account",
+      "growthSubtitle": "Cumulative account evolution through selected year.",
+      "balanceLine": "Investment balance line",
+      "currentBalance": "Current account balance"
+    },
+    "crossMetric": {
+      "title": "Cross-metric correlation",
+      "subtitle": "Compare income, expenses, selected category behavior, and investment balance in one timeline.",
+      "category": "Expense category for comparison",
+      "investmentAccount": "Investment account for comparison",
+      "allAccounts": "All accounts",
+      "series": {
+        "income": "Income",
+        "expenses": "Expenses",
+        "investmentBalance": "Investment balance",
+        "categoryExpense": "Selected category expenses"
+      }
+    },
+    "custom": {
+      "title": "Custom chart builder",
+      "subtitle": "Select metrics and period, compare series, and save presets for reuse.",
+      "window": "Period window (months)",
+      "presetName": "Preset name",
+      "presetPlaceholder": "Example: Cashflow vs portfolio",
+      "savePreset": "Save",
+      "metrics": {
+        "income": "Income",
+        "expenses": "Expenses",
+        "net": "Net",
+        "investmentBalance": "Investment balance",
+        "investmentNetFlow": "Investment net flow"
+      }
+    },
+    "table": {
+      "month": "Month",
+      "category": "Category",
+      "incomesByCategory": "Incomes by category",
+      "incomeTotal": "Income total",
+      "incomeSubtotal": "Income subtotal",
+      "expensesByCategory": "Expenses by category",
+      "expenseTotal": "Expense total",
+      "expenseSubtotal": "Expense subtotal",
+      "net": "Net",
+      "netTotal": "Net total"
+    }
   },
   "settings": {
     "title": "Settings",

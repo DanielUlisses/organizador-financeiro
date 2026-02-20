@@ -117,8 +117,12 @@ Core goals:
 
 ## Phase 6: Analytics and Custom Correlations
 
-- [ ] Phase 6 kickoff: analytics revamp started
-- [ ] Analytics page IA update:
+- [x] Phase 6 kickoff: analytics revamp started
+- [x] Phase 6 checklist governance:
+  - Use this checklist as the implementation tracker for all Phase 6 work
+  - Tick each checkbox immediately after its feature is implemented and validated
+  - Do not mark items as complete before tests/validation pass for that feature
+- [x] Analytics page IA update:
   - Replace left navigation inside analytics with top menu sections (similar grouping behavior to settings page)
   - Keep maximum horizontal space for charts and tables
   - Proposed top sections:
@@ -127,12 +131,12 @@ Core goals:
     - Category comparison
     - Income vs expenses table
     - Investment analysis
-- [ ] Global analytics filters (applied to all charts/tables in phase):
+- [x] Global analytics filters (applied to all charts/tables in phase):
   - Year selector is mandatory for all analytics sections
   - If selected year contains future months, include planned expenses/incomes in projections
   - Category multi-select (select/deselect categories to show/hide series)
   - Consistent legend toggles and visual state for hidden series
-- [ ] Expense trends area chart (primary chart):
+- [x] Expense trends area chart (primary chart):
   - One chart with timeframe switcher: monthly, semester, yearly
   - Time aggregation behavior:
     - Monthly: Jan-Dec points for selected year
@@ -142,35 +146,35 @@ Core goals:
     - Total expenses
     - Optional stacked/segmented categories based on category selection
   - Show planned future values distinctly (forecast/planned style) when applicable
-- [ ] Expense composition pie chart:
+- [x] Expense composition pie chart:
   - Monthly total expenses split by category
   - Uses selected month within selected year
   - Supports category hide/show interaction with recalculated percentages
-- [ ] Category comparison chart (time-window comparison):
+- [x] Category comparison chart (time-window comparison):
   - Compare category totals between months for rolling windows: 3, 6, 9, 12 months
   - Window anchored to selected month/year
   - Include planned values for future months in the selected window
   - Visual option: grouped bars or multi-line comparison (final UI decision during implementation)
-- [ ] Income vs expenses analytics table:
+- [x] Income vs expenses analytics table:
   - 12-month matrix supporting both past and future months from selected anchor month
   - For each month:
     - Income by category + income total
     - Expenses by category + expense total
     - Net result (income - expenses)
   - Clear subtotal/total row styling to maximize readability
-- [ ] Investment analysis section:
+- [x] Investment analysis section:
   - Area chart for portfolio growth per investment account over time
   - Support account select/deselect similar to category toggles
   - Respect year filter and include planned/projection points when available
   - Add investment account balances widget/group similar to dashboard balance section for quick account-level totals
-- [ ] Cross-metric analysis tools:
+- [x] Cross-metric analysis tools:
   - Correlate expense behavior with income and portfolio growth in shared period context
   - Enable quick compare of selected categories/accounts without leaving analytics page
-- [ ] Custom charts configuration:
+- [x] Custom charts configuration:
   - Select metrics
   - Select period/window
   - Compare series with shared timeline
-- [ ] Save and reuse custom chart presets
+- [x] Save and reuse custom chart presets
 
 ## Phase 7: Authentication Lock-In and Data Import
 
