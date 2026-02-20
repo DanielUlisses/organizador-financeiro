@@ -28,7 +28,11 @@ from app.models.user import User
 from app.models.bank_account import BankAccount, AccountType
 from app.models.credit_card import CreditCard
 
-from parse_csv import iterar_linhas, contas_todas_unicas
+from parse_csv import (
+    iterar_linhas,
+    contas_todas_unicas,
+    is_usd_transfer_account,
+)
 
 
 # Defaults para cartões (não temos no CSV)
@@ -100,6 +104,7 @@ def criar_contas(
 
         for nome in contas:
             tipo, bandeira = _classificar_conta(nome)
+            account_currency = "USD" if is_usd_transfer_account(nome) else currency
 
             if tipo == "bank_checking":
                 existing = db.query(BankAccount).filter(
@@ -107,6 +112,9 @@ def criar_contas(
                     BankAccount.name == nome,
                 ).first()
                 if existing:
+                    if existing.currency != account_currency and not dry_run:
+                        existing.currency = account_currency
+                        print(f"  Atualizada moeda da conta: {nome} -> {account_currency}")
                     nome_to_id[nome] = existing.id
                     if not dry_run:
                         print(f"  Conta corrente já existe: {nome} (id={existing.id})")
@@ -120,7 +128,7 @@ def criar_contas(
                     account_type=AccountType.CHECKING,
                     bank_name=None,
                     balance=0,
-                    currency=currency,
+                    currency=account_currency,
                 )
                 db.add(acc)
                 db.flush()
@@ -133,6 +141,9 @@ def criar_contas(
                     BankAccount.name == nome,
                 ).first()
                 if existing:
+                    if existing.currency != account_currency and not dry_run:
+                        existing.currency = account_currency
+                        print(f"  Atualizada moeda da conta: {nome} -> {account_currency}")
                     nome_to_id[nome] = existing.id
                     if not dry_run:
                         print(f"  Poupança já existe: {nome} (id={existing.id})")
@@ -146,7 +157,7 @@ def criar_contas(
                     account_type=AccountType.SAVINGS,
                     bank_name=None,
                     balance=0,
-                    currency=currency,
+                    currency=account_currency,
                 )
                 db.add(acc)
                 db.flush()

@@ -24,6 +24,10 @@ export const getSignedAmount = (payment: AccountPayment, accountId: number, fall
   if (payment.from_account_type === 'bank_account' && payment.from_account_id === accountId) return -Math.abs(amount)
   if (payment.to_account_type === 'bank_account' && payment.to_account_id === accountId) return Math.abs(amount)
 
+  // If account types are present and none matched bank_account side, this payment does not affect this bank account.
+  if (payment.from_account_type || payment.to_account_type) return 0
+
+  // Legacy fallback (older rows without account_type).
   if (payment.from_account_id === accountId) return -Math.abs(amount)
   if (payment.to_account_id === accountId) return Math.abs(amount)
 

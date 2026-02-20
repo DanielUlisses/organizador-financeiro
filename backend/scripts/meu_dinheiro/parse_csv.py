@@ -60,6 +60,33 @@ def _extrair_quatro_digitos_cartao(cartao: str) -> str | None:
     return match.group(0) if match else None
 
 
+def is_investment_transfer_account(nome_conta: str) -> bool:
+    """
+    Identifica contas de investimentos que não devem ser importadas como contas correntes/cartões
+    neste fluxo de migração inicial.
+    """
+    nome = (nome_conta or "").strip().casefold()
+    if not nome:
+        return False
+    if "invest" in nome:
+        return True
+    if nome.startswith("7 cdb inter liq diaria"):
+        return True
+    if nome.startswith("8 rdc di 90"):
+        return True
+    if nome in {"carteira de investimentos", "investimentos"}:
+        return True
+    return False
+
+
+def is_usd_transfer_account(nome_conta: str) -> bool:
+    """
+    Identifica contas operacionais em USD no contexto deste import.
+    """
+    nome = (nome_conta or "").strip().casefold()
+    return "nomad" in nome
+
+
 def iterar_linhas(caminho_csv: str | Path) -> Iterator[dict[str, Any]]:
     """
     Lê o CSV e produz um dicionário por linha com chaves em português e valores já parseados

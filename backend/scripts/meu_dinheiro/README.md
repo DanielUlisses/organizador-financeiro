@@ -22,6 +22,14 @@ Scripts de uso **único** na primeira carga: leem o CSV exportado do app Meu Din
 | "Carteira de investimentos" | Poupança (savings) |
 | Demais                   | Conta corrente (checking) |
 
+### Contas de investimento: importar e arquivar depois
+
+Neste fluxo, contas de investimento também são importadas (contas e transações), para manter o histórico completo e reduzir drift de saldo em contas operacionais.
+
+Depois do import e recálculo, você pode arquivar essas contas (setar `is_active=false`) com `archive_investment_accounts.py` para:
+- não aparecerem na listagem operacional de contas;
+- não entrarem nos cards/charts que usam `/bank-accounts`.
+
 O campo **Cartão** do CSV (ex.: "Daniel 7583") tem os 4 dígitos finais; múltiplos cartões na mesma conta são tratados como um único cartão no app (um last4 pode ser guardado como referência).
 
 Alguns exports do Meu Dinheiro vêm **sem** a coluna "Venc. Fatura"; outros trazem essa coluna entre "Data efetiva" e "Valor previsto". O parser aceita os dois formatos. Se você tiver **dois CSVs** (por exemplo um com só receitas/despesas e outro com transferências e pagamentos), use o script **combine** para gerar um único CSV deduplicado por "ID Único" antes de rodar contas e importação.
@@ -112,6 +120,7 @@ Por padrão usa `--user-id=1`. Outro usuário: `--user-id=2`.
 
 As categorias são extraídas da coluna **Categoria** do CSV, separadas por tipo de transação (receita/despesa/transferência).  
 O script faz **upsert**: cria as faltantes e atualiza cor/ícone das existentes.
+Quando existir **Subcategoria**, ela passa a ser o nome da categoria no app (com fallback para Categoria).
 
 ```bash
 python scripts/meu_dinheiro/create_categories.py "$MEU_DINHEIRO_CSV"
@@ -177,6 +186,30 @@ finally:
 PY
 ```
 
+## Recalcular saldo atual das contas (bank_accounts.balance)
+
+Após reimportar, recalcule `bank_accounts.balance` com base nas transações efetivadas:
+
+```bash
+cd backend
+python scripts/meu_dinheiro/recalculate_bank_balances.py --user-id 1
+
+# opcional dry-run
+python scripts/meu_dinheiro/recalculate_bank_balances.py --user-id 1 --dry-run
+```
+
+## Arquivar contas de investimento (pós-import)
+
+Após validar os saldos, arquive contas de investimento sem apagar histórico/transações:
+
+```bash
+cd backend
+python scripts/meu_dinheiro/archive_investment_accounts.py --user-id 1
+
+# opcional dry-run
+python scripts/meu_dinheiro/archive_investment_accounts.py --user-id 1 --dry-run
+```
+
 ## Resumo dos comandos (copiar/colar)
 
 Assumindo CSV em `~/Downloads/Meu_Dinheiro_20260219232317.csv` e banco de teste já configurado no `.env`:
@@ -203,6 +236,12 @@ python scripts/meu_dinheiro/create_categories.py "$MEU_DINHEIRO_CSV"
 
 # 6) Transações
 python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
+
+# 7) Recalcular saldos de contas
+python scripts/meu_dinheiro/recalculate_bank_balances.py --user-id 1
+
+# 8) Arquivar contas de investimento (opcional, recomendado para UI operacional)
+python scripts/meu_dinheiro/archive_investment_accounts.py --user-id 1
 ```
 
 ## Arquivos
@@ -212,5 +251,8 @@ python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
 - **create_accounts.py**: cria `bank_accounts` e `credit_cards` a partir de **Conta** e **Conta transferência** do CSV.
 - **create_categories.py**: cria/atualiza `transaction_categories` a partir do CSV, definindo cor e ícone por categoria.
 - **import_transactions.py**: cria `payments` (ONE_TIME) e `payment_occurrences`. "Saldo inicial" vira receita na conta na data efetiva. Em "Transferência"/"Pagamento", a direção é definida pelo sinal de `Valor efetivo` na conta da linha (valor positivo = entrada na conta da linha; valor negativo = saída). Deduplicação por `ID Único` quando disponível. Quando houver categoria correspondente criada, o `category_id` é preenchido.
+  O script também deduplica transferências espelhadas (quando o CSV traz o mesmo evento em duas linhas com IDs diferentes: uma negativa na origem e outra positiva no destino).
+- **recalculate_bank_balances.py**: recalcula `bank_accounts.balance` a partir dos `payments` efetivados (`RECONCILED`/`PROCESSED`).
+- **archive_investment_accounts.py**: marca `bank_accounts.is_active=false` para contas de investimento importadas (mantém histórico, oculta da UI operacional).
 
 Nenhum desses scripts é usado pela API ou pelo front; são apenas ferramentas de carga inicial.

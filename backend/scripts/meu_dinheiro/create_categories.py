@@ -60,8 +60,12 @@ def _tx_type_from_row(tipo: str, conta_transferencia: str) -> TransactionType:
     return TransactionType.EXPENSE
 
 
-def _category_name(tipo: str, categoria_csv: str, tx_type: TransactionType) -> str:
+def _category_name(tipo: str, categoria_csv: str, subcategoria_csv: str, tx_type: TransactionType) -> str:
+    subcategoria_csv = (subcategoria_csv or "").strip()
     categoria_csv = (categoria_csv or "").strip()
+    # Regra do import: quando há subcategoria, ela vira a categoria no app.
+    if subcategoria_csv:
+        return subcategoria_csv
     if categoria_csv:
         return categoria_csv
     if tipo == "Saldo inicial":
@@ -115,7 +119,7 @@ def criar_categorias(caminho_csv: str | Path, user_id: int, dry_run: bool = Fals
         for row in iterar_linhas(caminho_csv):
             tipo = row["tipo"].strip()
             tx_type = _tx_type_from_row(tipo, row["conta_transferencia"])
-            nome = _category_name(tipo, row["categoria"], tx_type)
+            nome = _category_name(tipo, row["categoria"], row["subcategoria"], tx_type)
             key = (tx_type.value, nome.casefold())
             color = _pick_color(nome, tx_type)
             icon = _pick_icon(nome, tx_type)

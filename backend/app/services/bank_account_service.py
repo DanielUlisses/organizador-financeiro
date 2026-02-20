@@ -21,7 +21,8 @@ class BankAccountService:
     def get_accounts_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[BankAccount]:
         """Get all bank accounts for a user"""
         return db.query(BankAccount).filter(
-            BankAccount.user_id == user_id
+            BankAccount.user_id == user_id,
+            BankAccount.is_active == True,
         ).offset(skip).limit(limit).all()
 
     @staticmethod

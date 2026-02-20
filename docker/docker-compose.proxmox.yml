@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/owner/organizador-financeiro-backend:latest}
+    container_name: organizador-financeiro-backend-prod
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      BACKEND_RELOAD: "false"
+      ENVIRONMENT: production
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+      UPLOADS_DIR: ${UPLOADS_DIR:-/app/storage/uploads}
+      UPLOADS_PUBLIC_BASE_URL: ${UPLOADS_PUBLIC_BASE_URL:-/uploads}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - type: bind
+        source: ${UPLOADS_HOST_PATH:-/opt/organizador/uploads}
+        target: /app/storage/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - organizador-prod-network
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/owner/organizador-financeiro-frontend:latest}
+    container_name: organizador-financeiro-frontend-prod
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - organizador-prod-network
+
+networks:
+  organizador-prod-network:
+    driver: bridge

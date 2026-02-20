@@ -235,7 +235,8 @@ export function AccountsPage() {
         const occurrences = recurringByPaymentId.get(payment.id) ?? []
         for (const occurrence of occurrences) {
           flattenedPayments.push({
-            id: Number(`${payment.id}${occurrence.id}`),
+            // Evita colisões do tipo payment=12/occ=34 vs payment=123/occ=4.
+            id: payment.id * 1_000_000 + occurrence.id,
             payment_id: payment.id,
             occurrence_id: occurrence.id,
             payment_type: payment.payment_type,
@@ -311,12 +312,14 @@ export function AccountsPage() {
     [payments, currentMonth],
   )
 
+  const touchesSelectedBankAccount = (payment: PaymentRow) =>
+    (payment.from_account_type === 'bank_account' && payment.from_account_id === selectedAccountId) ||
+    (payment.to_account_type === 'bank_account' && payment.to_account_id === selectedAccountId)
+
   const statementPayments = useMemo(
     () =>
       monthlyPayments.filter(
-        (payment) =>
-          payment.from_account_id === selectedAccountId ||
-          payment.to_account_id === selectedAccountId,
+        (payment) => touchesSelectedBankAccount(payment),
       ),
     [monthlyPayments, selectedAccountId],
   )
@@ -325,9 +328,7 @@ export function AccountsPage() {
   const allAccountPayments = useMemo(
     () =>
       payments.filter(
-        (payment) =>
-          payment.from_account_id === selectedAccountId ||
-          payment.to_account_id === selectedAccountId,
+        (payment) => touchesSelectedBankAccount(payment),
       ),
     [payments, selectedAccountId],
   )
@@ -338,14 +339,16 @@ export function AccountsPage() {
   const monthEndKey = useMemo(() => toYmd(monthEnd), [monthEnd])
   const carryOverBalance = useMemo(() => {
     if (!selectedAccount || !selectedAccountId) return 0
+    // selectedAccount.balance representa o saldo consolidado atual; para obter o saldo de abertura
+    // do mês selecionado, removemos os lançamentos efetivados a partir do início do mês.
     let rolling = selectedAccount.balance
     for (const payment of allAccountPayments) {
       const dueDateKey = normalizeDateKey(payment.due_date)
       if (!dueDateKey) continue
       const status = (payment.status ?? 'pending').toLowerCase()
       if (!EFFECTIVE_STATUSES.has(status)) continue
-      if (dueDateKey >= monthStartKey) continue
-      rolling += getSignedAmount(payment, selectedAccountId, false)
+      if (dueDateKey < monthStartKey) continue
+      rolling -= getSignedAmount(payment, selectedAccountId, false)
     }
     return rolling
   }, [allAccountPayments, monthStartKey, selectedAccount, selectedAccountId])
@@ -508,7 +511,7 @@ export function AccountsPage() {
         if (!EFFECTIVE_STATUSES.has(status)) continue
         const key = normalizeDateKey(p.due_date)
         if (!key || key < monthStart || key > monthEnd) continue
-        if (p.from_account_id === selectedAccountId || p.to_account_id === selectedAccountId) net += getSignedAmount(p, selectedAccountId)
+        if (touchesSelectedBankAccount(p)) net += getSignedAmount(p, selectedAccountId)
       }
       running -= net
       months.push({ label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), balance: running, year: y, month: m })
