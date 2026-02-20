@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AuthProvider } from '@/app/providers/AuthProvider'
 import { AppRouter } from '@/app/router/AppRouter'
 import { MonthContextProvider } from '@/app/providers/MonthContextProvider'
 import { ThemeProvider } from '@/app/providers/ThemeProvider'
@@ -14,9 +15,11 @@ function App() {
 
   return (
     <ThemeProvider>
-      <MonthContextProvider>
-        <AppRouter />
-      </MonthContextProvider>
+      <AuthProvider>
+        <MonthContextProvider>
+          <AppRouter />
+        </MonthContextProvider>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

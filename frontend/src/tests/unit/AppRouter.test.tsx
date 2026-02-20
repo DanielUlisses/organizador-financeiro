@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthProvider } from '@/app/providers/AuthProvider'
 import { AppRoutes } from '@/app/router/AppRouter'
 import { MonthContextProvider } from '@/app/providers/MonthContextProvider'
 import { ThemeProvider } from '@/app/providers/ThemeProvider'
@@ -8,11 +9,13 @@ import { ThemeProvider } from '@/app/providers/ThemeProvider'
 function renderRoutes(initialEntry: string) {
   render(
     <ThemeProvider>
-      <MonthContextProvider>
-        <MemoryRouter initialEntries={[initialEntry]}>
-          <AppRoutes />
-        </MemoryRouter>
-      </MonthContextProvider>
+      <AuthProvider>
+        <MonthContextProvider>
+          <MemoryRouter initialEntries={[initialEntry]}>
+            <AppRoutes />
+          </MemoryRouter>
+        </MonthContextProvider>
+      </AuthProvider>
     </ThemeProvider>,
   )
 }

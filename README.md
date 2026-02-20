@@ -34,6 +34,12 @@ Web application to help users organize their finances. Single user per deploymen
    # Edit .env with your configuration
    ```
 
+   **Google sign-in (required for login):** Create a project in [Google Cloud Console](https://console.cloud.google.com/), enable the "Google+ API" / "Google Identity Services", and create an OAuth 2.0 Client ID (Web application). Add to `.env` at the **repository root** (the frontend loads this file via `envDir`):
+   - `VITE_GOOGLE_CLIENT_ID=<your-client-id>` (frontend; used by the login page)
+   - `AUTH_GOOGLE_CLIENT_ID=<same-client-id>` (backend; optional but recommended to validate tokens)
+   - `VITE_AUTH_ENFORCED=true` (so protected routes require login; default in .env.example)
+   Restart the frontend dev server after changing any `VITE_*` variables.
+
 3. **Start PostgreSQL and create databases**
    ```bash
    make createdb

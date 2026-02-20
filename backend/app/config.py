@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Auth
     auth_secret: str = "your-secret-key-change-in-production-min-32-chars"
     auth_url: str = "http://localhost:8000"
+    auth_google_client_id: str = ""
+    auth_google_tokeninfo_url: str = "https://oauth2.googleapis.com/tokeninfo"
+    auth_session_cookie_name: str = "of_auth_session"
+    auth_session_ttl_hours: int = 8
+    auth_session_cookie_secure: bool = False
     
     # Environment
     environment: str = "development"

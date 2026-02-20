@@ -14,7 +14,13 @@ const PLANNED_STATUSES = new Set(['pending', 'scheduled'])
 const UNKNOWN_CATEGORY_KEY = '__unknown__'
 const CUSTOM_PRESETS_STORAGE_KEY = 'of.analytics.custom-presets.v1'
 
-type AnalyticsSectionId = 'expense-trends' | 'expense-composition' | 'category-comparison' | 'income-expenses-table' | 'investment-analysis'
+type AnalyticsSectionId =
+  | 'expense-trends'
+  | 'expense-composition'
+  | 'category-comparison'
+  | 'income-expenses-table'
+  | 'investment-analysis'
+  | 'budget-analysis'
 type Timeframe = 'monthly' | 'semester' | 'yearly'
 type WindowSize = 3 | 6 | 9 | 12
 type CustomMetricId = 'income' | 'expenses' | 'net' | 'investmentBalance' | 'investmentNetFlow'
@@ -24,6 +30,9 @@ type MetadataCategory = {
   transaction_type: string
   name: string
   color?: string | null
+  budget?: number | null
+  budget_scope?: 'all_months' | 'current_month'
+  budget_month?: string | null
 }
 
 type InvestmentAccount = {
@@ -35,6 +44,7 @@ type InvestmentAccount = {
 type RawPayment = {
   id: number
   amount: unknown
+  description?: string
   category?: string
   category_id?: number
   due_date?: string
@@ -57,6 +67,7 @@ type NormalizedPayment = {
   id: string
   dueDate: string
   amount: number
+  description?: string
   status: string
   categoryName: string
   categoryType: 'income' | 'expense' | 'transfer'
@@ -198,6 +209,7 @@ export function AnalyticsPage() {
   const [customMetrics, setCustomMetrics] = useState<Set<CustomMetricId>>(new Set(['income', 'expenses', 'net']))
   const [customWindowSize, setCustomWindowSize] = useState<WindowSize>(6)
   const [customPresetName, setCustomPresetName] = useState('')
+  const [selectedBudgetCategory, setSelectedBudgetCategory] = useState<string | null>(null)
   const [customPresets, setCustomPresets] = useState<CustomPreset[]>(() => {
     if (typeof window === 'undefined') return []
     try {
@@ -217,6 +229,7 @@ export function AnalyticsPage() {
     { id: 'category-comparison', label: t('analytics.sections.categoryComparison') },
     { id: 'income-expenses-table', label: t('analytics.sections.incomeExpensesTable') },
     { id: 'investment-analysis', label: t('analytics.sections.investmentAnalysis') },
+    { id: 'budget-analysis', label: t('analytics.sections.budgetAnalysis') },
   ]
 
   const expenseCategories = useMemo(
@@ -287,6 +300,7 @@ export function AnalyticsPage() {
               id: `p-${payment.id}`,
               dueDate: normalizeDate(payment.due_date),
               amount: toNumber(payment.amount),
+              description: payment.description,
               status: (payment.status ?? 'pending').toLowerCase(),
               categoryName,
               categoryType,
@@ -304,6 +318,7 @@ export function AnalyticsPage() {
               id: `o-${payment.id}-${occurrence.id}`,
               dueDate: normalizeDate(occurrence.scheduled_date),
               amount: toNumber(occurrence.amount),
+              description: payment.description,
               status: (occurrence.status ?? payment.status ?? 'pending').toLowerCase(),
               categoryName,
               categoryType,
@@ -362,6 +377,11 @@ export function AnalyticsPage() {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(CUSTOM_PRESETS_STORAGE_KEY, JSON.stringify(customPresets))
   }, [customPresets])
+
+  useEffect(() => {
+    if (currentSection === 'budget-analysis') return
+    setSelectedBudgetCategory(null)
+  }, [currentSection])
 
   const monthSummary = useMemo(
     () => buildMonthSummary(payments, selectedYear, locale, selectedExpenseCategories),
@@ -462,6 +482,97 @@ export function AnalyticsPage() {
       return point
     })
   }, [comparisonMonths, payments, selectedExpenseCategories])
+
+  const budgetWindowMonths = useMemo(() => comparisonMonths, [comparisonMonths])
+
+  const budgetMonthsKey = useMemo(
+    () => new Set(budgetWindowMonths.map((month) => `${month.year}-${String(month.monthIndex + 1).padStart(2, '0')}`)),
+    [budgetWindowMonths],
+  )
+
+  const budgetCategories = useMemo(
+    () =>
+      expenseCategories.filter((category) => {
+        const budget = Number(category.budget ?? 0)
+        return Number.isFinite(budget) && budget > 0
+      }),
+    [expenseCategories],
+  )
+
+  const budgetVsRealizedData = useMemo(() => {
+    const resolveBudget = (category: MetadataCategory, year: number, monthIndex: number) => {
+      const budget = Number(category.budget ?? 0)
+      if (!budget) return 0
+      if ((category.budget_scope ?? 'all_months') === 'all_months') return budget
+      if (!category.budget_month) return 0
+      return yearFromIso(category.budget_month) === year && monthFromIso(category.budget_month) === monthIndex ? budget : 0
+    }
+
+    return budgetWindowMonths.map((month) => {
+      let budgetTotal = 0
+      let realizedTotal = 0
+      for (const category of budgetCategories) {
+        budgetTotal += resolveBudget(category, month.year, month.monthIndex)
+      }
+      for (const payment of payments) {
+        if (!payment.dueDate || payment.categoryType !== 'expense') continue
+        if (!shouldUsePaymentForMonth(payment, month.year, month.monthIndex)) continue
+        if (yearFromIso(payment.dueDate) !== month.year || monthFromIso(payment.dueDate) !== month.monthIndex) continue
+        if (!budgetCategories.some((category) => category.name === payment.categoryName)) continue
+        realizedTotal += Math.abs(payment.amount)
+      }
+      return {
+        label: month.label,
+        budget: budgetTotal,
+        realized: realizedTotal,
+        consumption: budgetTotal > 0 ? Math.min((realizedTotal / budgetTotal) * 100, 300) : 0,
+      }
+    })
+  }, [budgetCategories, budgetWindowMonths, payments])
+
+  const categoryBudgetEvolutionData = useMemo(() => {
+    const realizedByCategory = new Map<string, number>()
+    for (const category of budgetCategories) realizedByCategory.set(category.name, 0)
+
+    for (const payment of payments) {
+      if (!payment.dueDate || payment.categoryType !== 'expense') continue
+      const monthKey = `${yearFromIso(payment.dueDate)}-${String(monthFromIso(payment.dueDate) + 1).padStart(2, '0')}`
+      if (!budgetMonthsKey.has(monthKey)) continue
+      if (!shouldUsePaymentForMonth(payment, yearFromIso(payment.dueDate), monthFromIso(payment.dueDate))) continue
+      if (!realizedByCategory.has(payment.categoryName)) continue
+      realizedByCategory.set(payment.categoryName, (realizedByCategory.get(payment.categoryName) ?? 0) + Math.abs(payment.amount))
+    }
+
+    return budgetCategories.map((category, index) => {
+      const budget = Number(category.budget ?? 0)
+      const realized = realizedByCategory.get(category.name) ?? 0
+      return {
+        category: category.name,
+        budget: budget * budgetWindowMonths.length,
+        realized,
+        color: category.color ?? getCategoryColor(category.name, index),
+        consumption: budget > 0 ? (realized / (budget * budgetWindowMonths.length || 1)) * 100 : 0,
+      }
+    })
+  }, [budgetCategories, budgetMonthsKey, budgetWindowMonths.length, payments])
+
+  const budgetPieData = useMemo(
+    () => categoryBudgetEvolutionData.filter((item) => item.realized > 0).sort((a, b) => b.realized - a.realized),
+    [categoryBudgetEvolutionData],
+  )
+
+  const budgetCategoryExpenses = useMemo(() => {
+    if (!selectedBudgetCategory) return []
+    return payments
+      .filter((payment) => {
+        if (!payment.dueDate || payment.categoryType !== 'expense') return false
+        if (payment.categoryName !== selectedBudgetCategory) return false
+        const monthKey = `${yearFromIso(payment.dueDate)}-${String(monthFromIso(payment.dueDate) + 1).padStart(2, '0')}`
+        if (!budgetMonthsKey.has(monthKey)) return false
+        return shouldUsePaymentForMonth(payment, yearFromIso(payment.dueDate), monthFromIso(payment.dueDate))
+      })
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }, [budgetMonthsKey, payments, selectedBudgetCategory])
 
   const tableData = useMemo(() => {
     const anchor = new Date(selectedYear, selectedMonthIndex, 1)
@@ -1240,6 +1351,101 @@ export function AnalyticsPage() {
           </div>
         </div>
       )}
+
+      {currentSection === 'budget-analysis' && (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <ChartCard title={t('analytics.budgetAnalysis.budgetVsRealizedTitle')} subtitle={t('analytics.budgetAnalysis.budgetVsRealizedSubtitle')}>
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={budgetVsRealizedData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(locale, currencyCode, Number(value))} />
+                  <Line type="monotone" dataKey="budget" stroke={CHART_THEME.layout.primary} dot={false} name={t('analytics.budgetAnalysis.series.budget')} />
+                  <Line type="monotone" dataKey="realized" stroke={CHART_THEME.series.expenses} dot={false} name={t('analytics.budgetAnalysis.series.realized')} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+
+          <ChartCard title={t('analytics.budgetAnalysis.consumptionEvolutionTitle')} subtitle={t('analytics.budgetAnalysis.consumptionEvolutionSubtitle')}>
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryBudgetEvolutionData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="category" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(locale, currencyCode, Number(value))} />
+                  <Bar dataKey="budget" fill={CHART_THEME.layout.primary} name={t('analytics.budgetAnalysis.series.budget')} />
+                  <Bar dataKey="realized" fill={CHART_THEME.series.expenses} name={t('analytics.budgetAnalysis.series.realized')} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+
+          <ChartCard title={t('analytics.budgetAnalysis.distributionTitle')} subtitle={t('analytics.budgetAnalysis.distributionSubtitle')}>
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Tooltip formatter={(value: number) => formatCurrency(locale, currencyCode, Number(value))} />
+                  <Pie
+                    data={budgetPieData}
+                    dataKey="realized"
+                    nameKey="category"
+                    outerRadius={105}
+                    innerRadius={45}
+                    paddingAngle={2}
+                    label
+                    onClick={(entry) => setSelectedBudgetCategory(String(entry.category))}
+                  >
+                    {budgetPieData.map((entry) => (
+                      <Cell key={entry.category} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+      )}
+
+      {selectedBudgetCategory ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl border bg-card p-5 shadow-xl">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold">{t('analytics.budgetAnalysis.expensesModalTitle', { category: selectedBudgetCategory })}</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedBudgetCategory(null)}
+                className="rounded-md border px-2 py-1 text-sm hover:bg-muted"
+              >
+                {t('common.close')}
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('analytics.budgetAnalysis.expensesModalSubtitle', { months: windowSize })}
+            </p>
+            <div className="mt-4 max-h-[55vh] overflow-y-auto">
+              {budgetCategoryExpenses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('common.noData')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {budgetCategoryExpenses.map((payment) => (
+                    <div key={payment.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium">{payment.description?.trim() || t('common.noData')}</p>
+                        <p className="text-xs text-muted-foreground">{payment.dueDate || t('common.noDate')}</p>
+                      </div>
+                      <p className="font-semibold">{formatCurrency(locale, currencyCode, Math.abs(payment.amount))}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

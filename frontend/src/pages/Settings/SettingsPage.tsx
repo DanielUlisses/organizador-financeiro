@@ -93,9 +93,6 @@ export function SettingsPage() {
     transaction_type: 'expense' as 'expense' | 'income' | 'transfer',
     name: '',
     color: '#5B8DEF',
-    budget: '',
-    budget_scope: 'all_months' as 'all_months' | 'current_month',
-    budget_month: '',
   })
   const [newTag, setNewTag] = useState({ name: '', color: '#8B5CF6' })
   const [newCard, setNewCard] = useState({
@@ -160,6 +157,18 @@ export function SettingsPage() {
     current_value: '0',
     currency: 'BRL',
   })
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null)
+  const [editCategoryForm, setEditCategoryForm] = useState({
+    transaction_type: 'expense' as 'expense' | 'income' | 'transfer',
+    name: '',
+    color: '#5B8DEF',
+  })
+  const [budgetForm, setBudgetForm] = useState({
+    categoryId: '',
+    budget: '',
+    budget_scope: 'all_months' as 'all_months' | 'current_month',
+    budget_month: '',
+  })
 
   const groupedCategories = useMemo(
     () => ({
@@ -169,6 +178,19 @@ export function SettingsPage() {
     }),
     [categories],
   )
+
+  useEffect(() => {
+    if (budgetForm.categoryId) return
+    const firstExpense = categories.find((category) => category.transaction_type === 'expense')
+    if (!firstExpense) return
+    setBudgetForm((current) => ({
+      ...current,
+      categoryId: String(firstExpense.id),
+      budget: firstExpense.budget != null ? String(firstExpense.budget) : '',
+      budget_scope: firstExpense.budget_scope,
+      budget_month: firstExpense.budget_month ?? '',
+    }))
+  }, [budgetForm.categoryId, categories])
 
   const loadData = async () => {
     setLoading(true)
@@ -272,9 +294,6 @@ export function SettingsPage() {
           transaction_type: newCategory.transaction_type,
           name: newCategory.name,
           color: newCategory.color,
-          budget: newCategory.budget ? Number(newCategory.budget) : null,
-          budget_scope: newCategory.budget_scope,
-          budget_month: newCategory.budget_scope === 'current_month' ? newCategory.budget_month || null : null,
         }),
       })
       if (!response.ok) throw new Error('Failed to create category.')
@@ -282,9 +301,6 @@ export function SettingsPage() {
         transaction_type: 'expense',
         name: '',
         color: '#5B8DEF',
-        budget: '',
-        budget_scope: 'all_months',
-        budget_month: '',
       })
       setNotice(t('settings.categoryCreated'))
       await loadData()
@@ -656,6 +672,58 @@ export function SettingsPage() {
     }
   }
 
+  const openEditCategoryModal = (category: (typeof categories)[0]) => {
+    setEditingCategoryId(category.id)
+    setEditCategoryForm({
+      transaction_type: category.transaction_type,
+      name: category.name,
+      color: category.color,
+    })
+  }
+
+  const saveEditCategory = async () => {
+    if (editingCategoryId == null) return
+    setError(null)
+    setNotice(null)
+    try {
+      const response = await fetch(`${API_BASE_URL}/transaction-metadata/categories/${editingCategoryId}?user_id=${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editCategoryForm),
+      })
+      if (!response.ok) throw new Error('Failed to update category.')
+      setEditingCategoryId(null)
+      setNotice(t('settings.categoryUpdated'))
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.updateFailed'))
+    }
+  }
+
+  const saveCategoryBudget = async () => {
+    if (!budgetForm.categoryId) return
+    setError(null)
+    setNotice(null)
+    try {
+      const response = await fetch(`${API_BASE_URL}/transaction-metadata/categories/${budgetForm.categoryId}?user_id=${USER_ID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          budget: budgetForm.budget ? Number(budgetForm.budget) : null,
+          budget_scope: budgetForm.budget_scope,
+          budget_month: budgetForm.budget_scope === 'current_month' ? budgetForm.budget_month || null : null,
+        }),
+      })
+      if (!response.ok) throw new Error('Failed to update budget.')
+      setNotice(t('settings.budgetUpdated'))
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.updateFailed'))
+    }
+  }
+
   const deleteTag = async (id: number) => {
     const response = await fetch(`${API_BASE_URL}/transaction-metadata/tags/${id}?user_id=${USER_ID}`, { method: 'DELETE' })
     if (response.ok) {
@@ -1004,76 +1072,122 @@ export function SettingsPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="rounded-xl border bg-card p-5 shadow-sm">
               <h3 className="text-base font-semibold">{t('settings.createCategory')}</h3>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              {t('settings.type')}
-              <select
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2"
-                value={newCategory.transaction_type}
-                onChange={(event) =>
-                  setNewCategory((current) => ({ ...current, transaction_type: event.target.value as 'expense' | 'income' | 'transfer' }))
-                }
-              >
-                <option value="expense">{t('settings.expense')}</option>
-                <option value="income">{t('settings.income')}</option>
-                <option value="transfer">{t('settings.transfer')}</option>
-              </select>
-            </label>
-            <label className="text-sm">
-              {t('common.name')}
-              <input
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2"
-                value={newCategory.name}
-                onChange={(event) => setNewCategory((current) => ({ ...current, name: event.target.value }))}
-              />
-            </label>
-            <label className="text-sm">
-              {t('settings.color')}
-              <input
-                type="color"
-                className="mt-1 h-10 w-full rounded-md border bg-background px-2"
-                value={newCategory.color}
-                onChange={(event) => setNewCategory((current) => ({ ...current, color: event.target.value }))}
-              />
-            </label>
-            <label className="text-sm">
-              {t('settings.budget')}
-              <input
-                type="number"
-                step="0.01"
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2"
-                value={newCategory.budget}
-                onChange={(event) => setNewCategory((current) => ({ ...current, budget: event.target.value }))}
-              />
-            </label>
-            <label className="text-sm">
-              {t('settings.budgetScope')}
-              <select
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2"
-                value={newCategory.budget_scope}
-                onChange={(event) =>
-                  setNewCategory((current) => ({ ...current, budget_scope: event.target.value as 'all_months' | 'current_month' }))
-                }
-              >
-                <option value="all_months">{t('settings.allMonthsLabel')}</option>
-                <option value="current_month">{t('settings.currentMonthScope')}</option>
-              </select>
-            </label>
-            <label className="text-sm">
-              {t('settings.budgetMonth')}
-              <input
-                type="date"
-                className="mt-1 w-full rounded-md border bg-background px-3 py-2"
-                value={newCategory.budget_month}
-                onChange={(event) => setNewCategory((current) => ({ ...current, budget_month: event.target.value }))}
-                disabled={newCategory.budget_scope !== 'current_month'}
-              />
-            </label>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button onClick={() => void createCategory()}>{t('settings.createCategory')}</Button>
-          </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="text-sm">
+                  {t('settings.type')}
+                  <select
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={newCategory.transaction_type}
+                    onChange={(event) =>
+                      setNewCategory((current) => ({ ...current, transaction_type: event.target.value as 'expense' | 'income' | 'transfer' }))
+                    }
+                  >
+                    <option value="expense">{t('settings.expense')}</option>
+                    <option value="income">{t('settings.income')}</option>
+                    <option value="transfer">{t('settings.transfer')}</option>
+                  </select>
+                </label>
+                <label className="text-sm">
+                  {t('common.name')}
+                  <input
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={newCategory.name}
+                    onChange={(event) => setNewCategory((current) => ({ ...current, name: event.target.value }))}
+                  />
+                </label>
+                <label className="text-sm sm:col-span-2">
+                  {t('settings.color')}
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="color"
+                      className="h-10 w-16 rounded-md border bg-background px-1"
+                      value={newCategory.color}
+                      onChange={(event) => setNewCategory((current) => ({ ...current, color: event.target.value }))}
+                    />
+                    <input
+                      className="w-32 rounded-md border bg-background px-2 py-2 text-sm"
+                      value={newCategory.color}
+                      onChange={(event) => setNewCategory((current) => ({ ...current, color: event.target.value }))}
+                    />
+                  </div>
+                </label>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={() => void createCategory()}>{t('settings.createCategory')}</Button>
+              </div>
             </div>
+
+            <div className="rounded-xl border bg-card p-5 shadow-sm">
+              <h3 className="text-base font-semibold">{t('settings.budgetManagement')}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{t('settings.budgetManagementHint')}</p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="text-sm sm:col-span-2">
+                  {t('settings.selectCategory')}
+                  <select
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={budgetForm.categoryId}
+                    onChange={(event) => {
+                      const selected = categories.find((category) => category.id === Number(event.target.value))
+                      setBudgetForm((current) => ({
+                        ...current,
+                        categoryId: event.target.value,
+                        budget: selected?.budget != null ? String(selected.budget) : '',
+                        budget_scope: selected?.budget_scope ?? 'all_months',
+                        budget_month: selected?.budget_month ?? '',
+                      }))
+                    }}
+                  >
+                    <option value="">{t('common.none')}</option>
+                    {categories
+                      .filter((category) => category.transaction_type === 'expense')
+                      .map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  {t('settings.budget')}
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={budgetForm.budget}
+                    onChange={(event) => setBudgetForm((current) => ({ ...current, budget: event.target.value }))}
+                  />
+                </label>
+                <label className="text-sm">
+                  {t('settings.budgetScope')}
+                  <select
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={budgetForm.budget_scope}
+                    onChange={(event) =>
+                      setBudgetForm((current) => ({ ...current, budget_scope: event.target.value as 'all_months' | 'current_month' }))
+                    }
+                  >
+                    <option value="all_months">{t('settings.allMonthsLabel')}</option>
+                    <option value="current_month">{t('settings.currentMonthScope')}</option>
+                  </select>
+                </label>
+                <label className="text-sm sm:col-span-2">
+                  {t('settings.budgetMonth')}
+                  <input
+                    type="date"
+                    className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                    value={budgetForm.budget_month}
+                    onChange={(event) => setBudgetForm((current) => ({ ...current, budget_month: event.target.value }))}
+                    disabled={budgetForm.budget_scope !== 'current_month'}
+                  />
+                </label>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button onClick={() => void saveCategoryBudget()} disabled={!budgetForm.categoryId}>
+                  {t('settings.saveBudget')}
+                </Button>
+              </div>
+            </div>
+
             <div className="rounded-xl border bg-card p-5 shadow-sm">
               <h3 className="mb-3 text-base font-semibold">{t('settings.categoriesList')}</h3>
               {(['expense', 'income', 'transfer'] as const).map((type) => (
@@ -1086,9 +1200,20 @@ export function SettingsPage() {
                           <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: category.color }} />
                           {category.name} {category.budget ? `• ${category.budget}` : ''}
                         </span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void deleteCategory(category.id)} aria-label={t('settings.deleteCategory')}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground"
+                            onClick={() => openEditCategoryModal(category)}
+                            aria-label={t('settings.editAriaLabel')}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => void deleteCategory(category.id)} aria-label={t('settings.deleteCategory')}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1468,6 +1593,63 @@ export function SettingsPage() {
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditingCardId(null)}>{t('common.cancel')}</Button>
               <Button onClick={() => void saveEditCard()}>{t('common.save')}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingCategoryId != null ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t('settings.editCategory')}</h3>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-sm">
+                {t('settings.type')}
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editCategoryForm.transaction_type}
+                  onChange={(event) =>
+                    setEditCategoryForm((current) => ({
+                      ...current,
+                      transaction_type: event.target.value as 'expense' | 'income' | 'transfer',
+                    }))
+                  }
+                >
+                  <option value="expense">{t('settings.expense')}</option>
+                  <option value="income">{t('settings.income')}</option>
+                  <option value="transfer">{t('settings.transfer')}</option>
+                </select>
+              </label>
+              <label className="text-sm">
+                {t('common.name')}
+                <input
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2"
+                  value={editCategoryForm.name}
+                  onChange={(event) => setEditCategoryForm((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                {t('settings.color')}
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="color"
+                    className="h-10 w-16 rounded-md border bg-background px-1"
+                    value={editCategoryForm.color}
+                    onChange={(event) => setEditCategoryForm((current) => ({ ...current, color: event.target.value }))}
+                  />
+                  <input
+                    className="w-32 rounded-md border bg-background px-2 py-2 text-sm"
+                    value={editCategoryForm.color}
+                    onChange={(event) => setEditCategoryForm((current) => ({ ...current, color: event.target.value }))}
+                  />
+                </div>
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingCategoryId(null)}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={() => void saveEditCategory()}>{t('common.save')}</Button>
             </div>
           </div>
         </div>

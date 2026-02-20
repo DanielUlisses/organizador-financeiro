@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, User } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, User } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '@/app/providers/useAuth'
 import { useTheme } from '@/app/providers/ThemeProvider'
 import { Button } from '@/components/ui/button'
 import { HeaderNotifications } from '@/layouts/Header/HeaderNotifications'
@@ -32,6 +33,8 @@ type HeaderProps = {
 }
 
 export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderProps) {
+  const navigate = useNavigate()
+  const { signOut } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, i18n } = useTranslation()
   const [profile, setProfile] = useState<HeaderProfile | null>(null)
@@ -98,6 +101,18 @@ export function Header({ collapsed, onOpenSidebar, onToggleCollapsed }: HeaderPr
         </Button>
 
         <HeaderNotifications />
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            signOut()
+            navigate('/login', { replace: true })
+          }}
+          aria-label={t('common.logout')}
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
 
         <Link
           to="/profile"

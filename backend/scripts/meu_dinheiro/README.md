@@ -1,0 +1,154 @@
+# Importação Meu Dinheiro (CSV)
+
+Scripts de uso **único** na primeira carga: leem o CSV exportado do app Meu Dinheiro e criam contas (bancárias + cartões) e transações no Organizador Financeiro. Tudo em Python e SQL; nada é exposto na interface do app.
+
+## Estrutura do CSV
+
+- **Data efetiva**: data da transação (usada como `due_date` / data do pagamento).
+- **Valor efetivo**: valor da transação (formato BR: `1.234,56`).
+- **Conta**: conta de origem (despesa/transferência) ou destino (receita).
+- **Conta transferência**: preenchida em transferências e em **Pagamento** (pagamento de cartão).
+- **Tipo**: Receita, Despesa, **Transferência**, **Pagamento**, **Saldo inicial**. Saldo inicial é importado como **receita** na conta na data efetiva (abertura de conta; contas são criadas com saldo 0).
+- **Status**: Conciliado → `reconciled`, Pendente → `pending`, Nconciliado/Confirmado → `processed`.
+- **Repetição**: Fixo/Único/Parcelado — na importação todas as transações são tratadas como **únicas** (one-time).
+
+## Regras de contas
+
+| Nome no CSV              | Tipo no app        |
+|--------------------------|--------------------|
+| Contém "TPC"             | Cartão Amex        |
+| "Mastercard Black"       | Cartão Mastercard  |
+| "Visa Infinity"          | Cartão Visa        |
+| "Carteira de investimentos" | Poupança (savings) |
+| Demais                   | Conta corrente (checking) |
+
+O campo **Cartão** do CSV (ex.: "Daniel 7583") tem os 4 dígitos finais; múltiplos cartões na mesma conta são tratados como um único cartão no app (um last4 pode ser guardado como referência).
+
+Alguns exports do Meu Dinheiro vêm **sem** a coluna "Venc. Fatura"; outros trazem essa coluna entre "Data efetiva" e "Valor previsto". O parser aceita os dois formatos. Se você tiver **dois CSVs** (por exemplo um com só receitas/despesas e outro com transferências e pagamentos), use o script **combine** para gerar um único CSV deduplicado por "ID Único" antes de rodar contas e importação.
+
+## Combinar dois CSVs (quando as transferências vêm em outro export)
+
+Se um export não trouxer transferências/pagamentos e outro trouxer, combine os dois e use o resultado na importação:
+
+```bash
+cd backend
+python scripts/meu_dinheiro/combine_meu_dinheiro_csv.py \
+  /caminho/arquivo_sem_transferencias.csv \
+  /caminho/arquivo_com_transferencias.csv \
+  -o /caminho/Meu_Dinheiro_combined.csv
+```
+
+- Os dois arquivos podem ter estruturas ligeiramente diferentes (ex.: um com coluna "Venc. Fatura", outro sem).
+- Em duplicatas (mesmo "ID Único"), é mantida a linha do **último** arquivo (o que costuma ter Transferência/Pagamento corretos).
+- A saída tem 2.361 transações únicas (exemplo: 2.030 + 790 − 459 duplicatas).
+
+Use depois `MEU_DINHEIRO_CSV=/caminho/Meu_Dinheiro_combined.csv` nos passos de contas e importação.
+
+## Pré-requisitos
+
+- Python com dependências do backend instaladas (ative o venv do projeto ou instale com `pip install -r backend/requirements.txt`).
+- Banco PostgreSQL (dev ou teste) com schema aplicado (Alembic).
+- Um usuário existente (ex.: `id=1`); pode usar `scripts/seed_default_user.py`.
+
+## Passos para limpar o banco de teste e rodar a importação
+
+### 1. Usar o banco de teste
+
+No `.env` na raiz do projeto (ou no backend), use o banco de teste para não afetar dados de desenvolvimento:
+
+```bash
+# No .env (ou export antes dos comandos)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/organizador_financeiro_test
+```
+
+Ou, apenas para os scripts, sem alterar `.env`:
+
+```bash
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/organizador_financeiro_test
+```
+
+### 2. Recriar o banco de teste (drop + create)
+
+```bash
+# Conectar ao postgres e recriar o database (ajuste user/host se necessário)
+psql -U postgres -h localhost -c "DROP DATABASE IF EXISTS organizador_financeiro_test;"
+psql -U postgres -h localhost -c "CREATE DATABASE organizador_financeiro_test;"
+```
+
+### 3. Rodar migrações
+
+A partir da **pasta backend**:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+### 4. Criar o usuário padrão (se não existir)
+
+```bash
+python scripts/seed_default_user.py
+```
+
+### 5. Criar contas e cartões a partir do CSV
+
+As contas são criadas a partir de **Conta** e **Conta transferência** (para que todas as contas referenciadas existam). Use o CSV combinado se tiver usado o passo de combinação.
+
+```bash
+# Caminho do CSV (combinado ou único) como argumento
+python scripts/meu_dinheiro/create_accounts.py /caminho/para/Meu_Dinheiro_combined.csv
+
+# Ou via variável de ambiente
+export MEU_DINHEIRO_CSV=/caminho/para/Meu_Dinheiro_combined.csv
+python scripts/meu_dinheiro/create_accounts.py
+
+# Só simular (não grava)
+python scripts/meu_dinheiro/create_accounts.py "$MEU_DINHEIRO_CSV" --dry-run
+```
+
+Por padrão usa `--user-id=1`. Outro usuário: `--user-id=2`.
+
+### 6. Importar transações
+
+```bash
+python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
+
+# Dry-run (só contagem)
+python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV" --dry-run
+```
+
+Linhas sem **data efetiva** ou sem **valor efetivo** são ignoradas. Para incluir linhas sem data efetiva (evitar ignorar): `--importar-sem-data` (ainda assim é necessário ter valor).
+
+## Resumo dos comandos (copiar/colar)
+
+Assumindo CSV em `~/Downloads/Meu_Dinheiro_20260219232317.csv` e banco de teste já configurado no `.env`:
+
+```bash
+cd backend
+
+# 1) Recriar banco de teste (opcional)
+# psql -U postgres -h localhost -c "DROP DATABASE IF EXISTS organizador_financeiro_test;"
+# psql -U postgres -h localhost -c "CREATE DATABASE organizador_financeiro_test;"
+
+# 2) Migrações
+alembic upgrade head
+
+# 3) Usuário
+python scripts/seed_default_user.py
+
+# 4) Contas
+export MEU_DINHEIRO_CSV=~/Downloads/Meu_Dinheiro_20260219232317.csv
+python scripts/meu_dinheiro/create_accounts.py "$MEU_DINHEIRO_CSV"
+
+# 5) Transações
+python scripts/meu_dinheiro/import_transactions.py "$MEU_DINHEIRO_CSV"
+```
+
+## Arquivos
+
+- **parse_csv.py**: parser do CSV (datas BR, valor BR, colunas em português); funções `iterar_linhas`, `contas_unicas`, `contas_todas_unicas`, etc. Aceita CSV com ou sem coluna "Venc. Fatura".
+- **combine_meu_dinheiro_csv.py**: combina dois ou mais CSVs e deduplica por "ID Único" (mantém a linha do último arquivo em duplicatas). Saída no formato de 16 colunas.
+- **create_accounts.py**: cria `bank_accounts` e `credit_cards` a partir de **Conta** e **Conta transferência** do CSV.
+- **import_transactions.py**: cria `payments` (ONE_TIME) e `payment_occurrences`. "Saldo inicial" vira receita na conta na data efetiva. "Transferência" e "Pagamento" são uma única transação por par origem/destino (deduplicação por data, valor e contas para não duplicar em origem e destino).
+
+Nenhum desses scripts é usado pela API ou pelo front; são apenas ferramentas de carga inicial.

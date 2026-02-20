@@ -15,6 +15,7 @@
     "clear": "Clear",
     "archive": "Archive",
     "restore": "Restore",
+    "logout": "Logout",
     "noData": "No data",
     "search": "Search",
     "navigation": "Navigation",
@@ -155,11 +156,16 @@
   },
   "login": {
     "title": "Login",
-    "emailPasswordLocked": "Email/password authentication will be locked in the final frontend phase.",
-    "email": "Email",
-    "password": "Password",
-    "signIn": "Sign in",
-    "continueToDashboard": "Continue to dashboard"
+    "googleOnly": "Use Google authentication to access this deployment.",
+    "googleSignIn": "Sign in with Google",
+    "continueToDashboard": "Continue to dashboard",
+    "errors": {
+      "invalid_google_token": "Google authentication failed. Try again.",
+      "unauthorized_user": "This Google account is not authorized for this deployment.",
+      "google_not_configured": "Google authentication is not configured. Set VITE_GOOGLE_CLIENT_ID in .env (and AUTH_GOOGLE_CLIENT_ID for the backend), then restart the dev server.",
+      "backend_unavailable": "Authentication backend is unavailable.",
+      "auth_failed": "Authentication failed. Try again."
+    }
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -333,7 +339,8 @@
       "expenseComposition": "Expense composition",
       "categoryComparison": "Category comparison",
       "incomeExpensesTable": "Income vs expenses table",
-      "investmentAnalysis": "Investment analysis"
+      "investmentAnalysis": "Investment analysis",
+      "budgetAnalysis": "Budget analysis"
     },
     "filters": {
       "year": "Year",
@@ -383,6 +390,20 @@
       "growthSubtitle": "Cumulative account evolution through selected year.",
       "balanceLine": "Investment balance line",
       "currentBalance": "Current account balance"
+    },
+    "budgetAnalysis": {
+      "budgetVsRealizedTitle": "Budget vs realized by month",
+      "budgetVsRealizedSubtitle": "Follow monthly budget and actual expenses for the selected period.",
+      "consumptionEvolutionTitle": "Category budget consumption",
+      "consumptionEvolutionSubtitle": "Compare budgeted values with realized expenses by category.",
+      "distributionTitle": "Expense distribution by category",
+      "distributionSubtitle": "Click a category to inspect expenses in the selected period.",
+      "series": {
+        "budget": "Budget",
+        "realized": "Realized"
+      },
+      "expensesModalTitle": "Expenses - {{category}}",
+      "expensesModalSubtitle": "Transactions in the selected {{months}}-month window."
     },
     "crossMetric": {
       "title": "Cross-metric correlation",
@@ -464,6 +485,13 @@
     "limitBalancePaymentAccount": "limit {{limit}} • balance {{balance}} • payment account {{account}}",
     "autoChecking": "auto-checking",
     "createCategory": "Create category",
+    "editCategory": "Edit category",
+    "categoryUpdated": "Category updated.",
+    "budgetManagement": "Budget management",
+    "budgetManagementHint": "Set category budget by month. Use all months to apply changes to future months.",
+    "selectCategory": "Category",
+    "saveBudget": "Save budget",
+    "budgetUpdated": "Budget updated.",
     "budget": "Budget",
     "budgetScope": "Budget scope",
     "budgetMonth": "Budget month",
@@ -531,7 +559,21 @@
     "failedToSave": "Failed to save",
     "uploadPhoto": "Upload photo",
     "cropPhoto": "Crop photo",
-    "uploading": "Uploading…"
+    "uploading": "Uploading…",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "updatePassword": "Update password",
+    "passwordUpdated": "Password updated.",
+    "passwordErrors": {
+      "fillAllFields": "Fill all password fields.",
+      "confirmationMismatch": "New password and confirmation must match.",
+      "tooShort": "New password must have at least 8 characters.",
+      "invalidCurrent": "Current password is invalid.",
+      "sameAsCurrent": "New password must be different from current password.",
+      "updateFailed": "Failed to update password."
+    }
   },
   "fab": {
     "addTransaction": "Add transaction",

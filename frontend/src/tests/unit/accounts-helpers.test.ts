@@ -32,8 +32,8 @@ describe('accounts helpers', () => {
       1,
     )
     expect(series).toEqual([
-      { label: '02-05', balance: 1200, cumulativeExpenses: 0 },
-      { label: '02-10', balance: 1100, cumulativeExpenses: 100 },
+      { label: '02-05', balance: 1200, cumulativeExpenses: 0, dailyExpenses: 0 },
+      { label: '02-10', balance: 1100, cumulativeExpenses: 100, dailyExpenses: 100 },
     ])
   })
 })

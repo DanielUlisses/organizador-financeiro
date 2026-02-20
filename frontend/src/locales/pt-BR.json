@@ -15,6 +15,7 @@
     "clear": "Limpar",
     "archive": "Arquivar",
     "restore": "Restaurar",
+    "logout": "Sair",
     "noData": "Sem dados",
     "search": "Pesquisar",
     "navigation": "Navegação",
@@ -155,11 +156,16 @@
   },
   "login": {
     "title": "Entrar",
-    "emailPasswordLocked": "Autenticação por e-mail/senha será habilitada na fase final do frontend.",
-    "email": "E-mail",
-    "password": "Senha",
-    "signIn": "Entrar",
-    "continueToDashboard": "Continuar para o painel"
+    "googleOnly": "Use autenticação Google para acessar esta implantação.",
+    "googleSignIn": "Entrar com Google",
+    "continueToDashboard": "Continuar para o painel",
+    "errors": {
+      "invalid_google_token": "Falha na autenticação Google. Tente novamente.",
+      "unauthorized_user": "Esta conta Google não está autorizada para esta implantação.",
+      "google_not_configured": "A autenticação Google não está configurada. Defina VITE_GOOGLE_CLIENT_ID no .env (e AUTH_GOOGLE_CLIENT_ID no backend), depois reinicie o servidor de desenvolvimento.",
+      "backend_unavailable": "Backend de autenticação indisponível.",
+      "auth_failed": "Falha na autenticação. Tente novamente."
+    }
   },
   "nav": {
     "dashboard": "Painel",
@@ -333,7 +339,8 @@
       "expenseComposition": "Composição de despesas",
       "categoryComparison": "Comparação por categoria",
       "incomeExpensesTable": "Tabela receitas vs despesas",
-      "investmentAnalysis": "Análise de investimentos"
+      "investmentAnalysis": "Análise de investimentos",
+      "budgetAnalysis": "Análise de orçamento"
     },
     "filters": {
       "year": "Ano",
@@ -383,6 +390,20 @@
       "growthSubtitle": "Evolução acumulada das contas no ano selecionado.",
       "balanceLine": "Linha de saldo de investimentos",
       "currentBalance": "Saldo atual da conta"
+    },
+    "budgetAnalysis": {
+      "budgetVsRealizedTitle": "Orçado vs realizado por mês",
+      "budgetVsRealizedSubtitle": "Acompanhe orçamento mensal e despesas reais no período selecionado.",
+      "consumptionEvolutionTitle": "Consumo de orçamento por categoria",
+      "consumptionEvolutionSubtitle": "Compare valor orçado com valor realizado por categoria.",
+      "distributionTitle": "Distribuição de despesas por categoria",
+      "distributionSubtitle": "Clique em uma categoria para ver as despesas no período selecionado.",
+      "series": {
+        "budget": "Orçado",
+        "realized": "Realizado"
+      },
+      "expensesModalTitle": "Despesas - {{category}}",
+      "expensesModalSubtitle": "Transações na janela selecionada de {{months}} meses."
     },
     "crossMetric": {
       "title": "Correlação entre métricas",
@@ -464,6 +485,13 @@
     "limitBalancePaymentAccount": "limite {{limit}} • saldo {{balance}} • conta {{account}}",
     "autoChecking": "conta corrente automática",
     "createCategory": "Criar categoria",
+    "editCategory": "Editar categoria",
+    "categoryUpdated": "Categoria atualizada.",
+    "budgetManagement": "Gestão de orçamento",
+    "budgetManagementHint": "Defina orçamento por categoria e mês. Use todos os meses para refletir em meses futuros.",
+    "selectCategory": "Categoria",
+    "saveBudget": "Salvar orçamento",
+    "budgetUpdated": "Orçamento atualizado.",
     "budget": "Orçamento",
     "budgetScope": "Escopo do orçamento",
     "budgetMonth": "Mês do orçamento",
@@ -531,7 +559,21 @@
     "failedToSave": "Falha ao salvar",
     "uploadPhoto": "Enviar foto",
     "cropPhoto": "Recortar foto",
-    "uploading": "Enviando…"
+    "uploading": "Enviando…",
+    "changePassword": "Alterar senha",
+    "currentPassword": "Senha atual",
+    "newPassword": "Nova senha",
+    "confirmNewPassword": "Confirmar nova senha",
+    "updatePassword": "Atualizar senha",
+    "passwordUpdated": "Senha atualizada.",
+    "passwordErrors": {
+      "fillAllFields": "Preencha todos os campos de senha.",
+      "confirmationMismatch": "A nova senha e a confirmação devem ser iguais.",
+      "tooShort": "A nova senha deve ter ao menos 8 caracteres.",
+      "invalidCurrent": "A senha atual está inválida.",
+      "sameAsCurrent": "A nova senha deve ser diferente da senha atual.",
+      "updateFailed": "Falha ao atualizar senha."
+    }
   },
   "fab": {
     "addTransaction": "Adicionar transação",
