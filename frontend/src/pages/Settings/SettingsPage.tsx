@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SectionHeader } from '@/components/common/SectionHeader'
@@ -30,6 +30,7 @@ const SECTION_LABEL_KEYS: Record<SettingsSectionId, string> = {
   tags: 'settings.tags',
   'investment-accounts': 'settings.investmentAccounts',
   notifications: 'settings.notifications',
+  'import-export': 'settings.importExport',
 }
 
 export function SettingsPage() {
@@ -176,6 +177,20 @@ export function SettingsPage() {
     budget_scope: 'all_months' as 'all_months' | 'current_month',
     budget_month: '',
   })
+  const [isExportingBackup, setIsExportingBackup] = useState(false)
+  const [isImportingBackup, setIsImportingBackup] = useState(false)
+  const importFileInputRef = useRef<HTMLInputElement | null>(null)
+  const [selectedBackupPayload, setSelectedBackupPayload] = useState<Record<string, unknown> | null>(null)
+  const [selectedBackupSummary, setSelectedBackupSummary] = useState<{
+    fileName: string
+    version: string
+    exportedAt: string | null
+    bankAccounts: number
+    creditCards: number
+    categories: number
+    tags: number
+    payments: number
+  } | null>(null)
 
   const groupedCategories = useMemo(
     () => ({
@@ -743,6 +758,107 @@ export function SettingsPage() {
     }
   }
 
+  const exportBackup = async () => {
+    setError(null)
+    setNotice(null)
+    setIsExportingBackup(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/import-export/export?user_id=${USER_ID}`)
+      if (!response.ok) throw new Error(t('settings.exportBackupFailed'))
+
+      const payload = await response.json()
+      const json = JSON.stringify(payload, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const objectUrl = URL.createObjectURL(blob)
+      const now = new Date().toISOString().replace(/[:.]/g, '-')
+      const downloadName = `organizador-financeiro-backup-${now}.json`
+
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = downloadName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(objectUrl)
+      setNotice(t('settings.exportBackupSuccess'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.exportBackupFailed'))
+    } finally {
+      setIsExportingBackup(false)
+    }
+  }
+
+  const handleBackupFileSelect = async (file: File) => {
+    setError(null)
+    setNotice(null)
+    try {
+      const fileContent = await file.text()
+      const parsed = JSON.parse(fileContent) as {
+        version?: unknown
+        exported_at?: unknown
+        data?: {
+          bank_accounts?: unknown[]
+          credit_cards?: unknown[]
+          categories?: unknown[]
+          tags?: unknown[]
+          payments?: unknown[]
+        }
+      }
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.version !== 'string' || !parsed.data || typeof parsed.data !== 'object') {
+        throw new Error(t('settings.invalidBackupFile'))
+      }
+
+      setSelectedBackupPayload(parsed as Record<string, unknown>)
+      setSelectedBackupSummary({
+        fileName: file.name,
+        version: parsed.version,
+        exportedAt: typeof parsed.exported_at === 'string' ? parsed.exported_at : null,
+        bankAccounts: Array.isArray(parsed.data.bank_accounts) ? parsed.data.bank_accounts.length : 0,
+        creditCards: Array.isArray(parsed.data.credit_cards) ? parsed.data.credit_cards.length : 0,
+        categories: Array.isArray(parsed.data.categories) ? parsed.data.categories.length : 0,
+        tags: Array.isArray(parsed.data.tags) ? parsed.data.tags.length : 0,
+        payments: Array.isArray(parsed.data.payments) ? parsed.data.payments.length : 0,
+      })
+    } catch (err) {
+      setSelectedBackupPayload(null)
+      setSelectedBackupSummary(null)
+      setError(err instanceof Error ? err.message : t('settings.invalidBackupFile'))
+    }
+  }
+
+  const importBackup = async () => {
+    if (!selectedBackupPayload) {
+      setError(t('settings.invalidBackupFile'))
+      return
+    }
+    setError(null)
+    setNotice(null)
+    const confirmed = window.confirm(t('settings.importConfirmOverwrite'))
+    if (!confirmed) return
+
+    setIsImportingBackup(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/import-export/import?user_id=${USER_ID}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedBackupPayload),
+      })
+      if (!response.ok) {
+        const errorBody = (await response.json().catch(() => null)) as { detail?: string } | null
+        throw new Error(errorBody?.detail ?? t('settings.importBackupFailed'))
+      }
+      await loadData()
+      window.dispatchEvent(new CustomEvent('of:transactions-changed'))
+      setSelectedBackupPayload(null)
+      setSelectedBackupSummary(null)
+      setNotice(t('settings.importBackupSuccess'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.importBackupFailed'))
+    } finally {
+      setIsImportingBackup(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       <nav className="flex shrink-0 flex-row flex-wrap gap-1 border-b pb-4 md:w-52 md:flex-col md:border-b-0 md:border-r md:pb-0 md:pr-4">
@@ -780,6 +896,8 @@ export function SettingsPage() {
                           ? t('settings.subtitleInvestmentAccounts')
                           : currentSection === 'notifications'
                             ? t('settings.subtitleNotifications')
+                            : currentSection === 'import-export'
+                              ? t('settings.subtitleImportExport')
                             : undefined
             }
           />
@@ -1436,6 +1554,58 @@ export function SettingsPage() {
                 />
                 <span className="text-sm">{t('settings.reconciliationWarnings')}</span>
               </label>
+            </div>
+          </div>
+        )}
+
+        {currentSection === 'import-export' && (
+          <div className="rounded-xl border bg-card p-5 shadow-sm">
+            <h3 className="text-base font-semibold">{t('settings.importExportTitle')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{t('settings.importExportDescription')}</p>
+            <p className="mt-2 text-sm text-red-600">{t('settings.importOverwriteWarning')}</p>
+            {selectedBackupSummary ? (
+              <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-medium">{t('settings.importSelectedBanner', { file: selectedBackupSummary.fileName })}</p>
+                <p>{t('settings.backupVersion', { version: selectedBackupSummary.version })}</p>
+                {selectedBackupSummary.exportedAt ? <p>{t('settings.backupExportedAt', { exportedAt: selectedBackupSummary.exportedAt })}</p> : null}
+                <p>
+                  {t('settings.importRecordsSummary', {
+                    bankAccounts: selectedBackupSummary.bankAccounts,
+                    creditCards: selectedBackupSummary.creditCards,
+                    categories: selectedBackupSummary.categories,
+                    tags: selectedBackupSummary.tags,
+                    payments: selectedBackupSummary.payments,
+                  })}
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button onClick={() => void exportBackup()} disabled={isExportingBackup || isImportingBackup}>
+                {isExportingBackup ? t('settings.exporting') : t('settings.exportData')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => importFileInputRef.current?.click()}
+                disabled={isImportingBackup || isExportingBackup}
+              >
+                {t('settings.selectImportFile')}
+              </Button>
+              <Button onClick={() => void importBackup()} disabled={isImportingBackup || isExportingBackup || !selectedBackupPayload}>
+                {isImportingBackup ? t('settings.importing') : t('settings.importData')}
+              </Button>
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) {
+                    void handleBackupFileSelect(file)
+                  }
+                  event.currentTarget.value = ''
+                }}
+              />
             </div>
           </div>
         )}

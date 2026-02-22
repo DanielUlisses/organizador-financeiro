@@ -37,6 +37,7 @@ from app.api.routes import (
     payments,
     reports,
     transaction_metadata,
+    import_export,
 )
 
 app.include_router(users.router)
@@ -46,6 +47,7 @@ app.include_router(investment_accounts.router)
 app.include_router(payments.router)
 app.include_router(reports.router)
 app.include_router(transaction_metadata.router)
+app.include_router(import_export.router)
 
 # Note: better-auth will be integrated on the frontend side
 # Backend will validate sessions via cookies/JWT tokens
@@ -64,4 +66,12 @@ async def root():
         "message": "Organizador Financeiro API",
         "version": "0.1.0",
         "docs": "/docs",
+    }
+
+
+@app.get("/config")
+async def public_config():
+    """Public config for the frontend (no auth). Used at runtime so Docker/production does not need VITE_* build args."""
+    return {
+        "googleClientId": settings.auth_google_client_id or "",
     }

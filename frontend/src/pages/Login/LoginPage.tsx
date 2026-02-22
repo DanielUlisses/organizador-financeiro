@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/app/providers/useAuth'
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
+/** From build-time env (dev) or from backend /api/config (Docker/production). */
+const BUILD_TIME_GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 
 declare global {
   interface Window {
@@ -25,6 +26,8 @@ export function LoginPage() {
   const { signIn } = useAuth()
   const [submitting, setSubmitting] = useState(false)
   const [errorKey, setErrorKey] = useState<string | null>(null)
+  const [googleClientId, setGoogleClientId] = useState<string>(BUILD_TIME_GOOGLE_CLIENT_ID)
+  const [configLoaded, setConfigLoaded] = useState(Boolean(BUILD_TIME_GOOGLE_CLIENT_ID))
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
 
   const targetAfterLogin =
@@ -44,17 +47,39 @@ export function LoginPage() {
     navigate(targetAfterLogin, { replace: true })
   }
 
+  // In Docker/production, VITE_GOOGLE_CLIENT_ID is not baked in; fetch from backend at runtime.
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID) {
-      setErrorKey('google_not_configured')
+    if (BUILD_TIME_GOOGLE_CLIENT_ID) {
+      setConfigLoaded(true)
       return
     }
+    let cancelled = false
+    fetch('/api/config')
+      .then((res) => (res.ok ? res.json() : { googleClientId: '' }))
+      .then((data: { googleClientId?: string }) => {
+        if (!cancelled && data?.googleClientId) setGoogleClientId(data.googleClientId)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setConfigLoaded(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!configLoaded || !googleClientId) {
+      if (configLoaded && !googleClientId) setErrorKey('google_not_configured')
+      return
+    }
+    setErrorKey(null)
 
     const renderGoogleButton = () => {
       if (!window.google || !googleButtonRef.current) return
       googleButtonRef.current.innerHTML = ''
       window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: googleClientId,
         callback: (response) => {
           void handleGoogleSignIn(response.credential ?? '')
         },
@@ -80,7 +105,7 @@ export function LoginPage() {
     script.onload = () => renderGoogleButton()
     script.onerror = () => setErrorKey('google_not_configured')
     document.head.appendChild(script)
-  }, [])
+  }, [configLoaded, googleClientId])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-4">

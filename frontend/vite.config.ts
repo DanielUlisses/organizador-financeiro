@@ -3,9 +3,10 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vitejs.dev/config/
+// Vite loads .env from envDir. Use frontend/.env for VITE_* vars (or run with root .env via envDir: '..').
 export default defineConfig({
   plugins: [react()],
-  envDir: path.resolve(__dirname, '..'),
+  envDir: path.resolve(__dirname),
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

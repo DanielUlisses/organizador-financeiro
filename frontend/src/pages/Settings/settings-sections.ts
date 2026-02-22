@@ -6,6 +6,7 @@ export type SettingsSectionId =
   | 'tags'
   | 'investment-accounts'
   | 'notifications'
+  | 'import-export'
 
 export const SETTINGS_SECTIONS: { id: SettingsSectionId; label: string }[] = [
   { id: 'general', label: 'General' },
@@ -15,6 +16,7 @@ export const SETTINGS_SECTIONS: { id: SettingsSectionId; label: string }[] = [
   { id: 'tags', label: 'Tags' },
   { id: 'investment-accounts', label: 'Investment accounts' },
   { id: 'notifications', label: 'Notifications' },
+  { id: 'import-export', label: 'Import & Export' },
 ]
 
 export const NOTIFICATION_PREFERENCE_KEYS = {
