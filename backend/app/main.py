@@ -1,4 +1,5 @@
 """FastAPI application entry point"""
+
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,7 +19,10 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite default port
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ],  # Vite default port
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,7 +60,11 @@ app.include_router(import_export.router)
 # Serve uploaded user files from mounted external storage.
 uploads_dir = Path(settings.uploads_dir)
 uploads_dir.mkdir(parents=True, exist_ok=True)
-app.mount(settings.uploads_public_base_url, StaticFiles(directory=str(uploads_dir)), name="uploads")
+app.mount(
+    settings.uploads_public_base_url,
+    StaticFiles(directory=str(uploads_dir)),
+    name="uploads",
+)
 
 
 @app.get("/")
