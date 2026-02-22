@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { getDefaultCurrency, getTransactionOrder } from '@/pages/Settings/settings-sections'
 import { getCroppedImg } from '@/pages/Profile/getCroppedImg'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const UPLOADS_BASE = '/uploads'
 const USER_ID = 1
 

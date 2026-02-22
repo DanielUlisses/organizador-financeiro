@@ -63,5 +63,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           provenance: false
+          build-args: |
+            VITE_API_URL=/api
+            VITE_AUTH_ENFORCED=true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

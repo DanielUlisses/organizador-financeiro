@@ -54,6 +54,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
+        VITE_AUTH_ENFORCED: ${VITE_AUTH_ENFORCED:-true}
         VITE_UPLOADS_PUBLIC_BASE_URL: ${UPLOADS_PUBLIC_BASE_URL:-/uploads}
     container_name: organizador-financeiro-frontend-prod
     restart: unless-stopped

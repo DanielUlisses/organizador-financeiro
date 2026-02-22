@@ -19,7 +19,7 @@ import {
   setReducedVisualEffects,
 } from '@/pages/Settings/settings-sections'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const USER_ID = 1
 
 const SECTION_LABEL_KEYS: Record<SettingsSectionId, string> = {

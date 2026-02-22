@@ -7,7 +7,7 @@ import { ChartCard } from '@/components/common/ChartCard'
 import { Button } from '@/components/ui/button'
 import { getCategoryColor } from '@/lib/chart-colors'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const USER_ID = 1
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 

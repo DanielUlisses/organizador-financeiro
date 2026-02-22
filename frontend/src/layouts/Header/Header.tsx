@@ -9,7 +9,7 @@ import { useReducedVisualEffects } from '@/hooks/useReducedVisualEffects'
 import { HeaderNotifications } from '@/layouts/Header/HeaderNotifications'
 import { SUPPORTED_LANGUAGES, type SupportedLanguageCode } from '@/i18n'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const UPLOADS_BASE = '/uploads'
 const USER_ID = 1
 

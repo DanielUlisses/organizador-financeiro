@@ -70,7 +70,7 @@ type MetadataCategory = {
 type WidgetLoadState = 'idle' | 'loading' | 'success' | 'error'
 type CurrencyMetrics = Record<string, { income: number; expenses: number }>
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const DASHBOARD_SELECTED_ACCOUNTS_STORAGE_KEY = 'of_dashboard_selected_account_ids'
 const CURRENCY_FLAGS: Record<string, string> = {
   USD: '/flags/us.png',

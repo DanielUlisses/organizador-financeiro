@@ -45,7 +45,7 @@ type StatementRow =
   | { type: 'carry'; key: string }
   | { type: 'payment'; key: string; payment: PaymentRow }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const USER_ID = 1
 const EFFECTIVE_STATUSES = new Set(['processed', 'reconciled'])
 const PENDING_STATUSES = new Set(['pending', 'scheduled'])

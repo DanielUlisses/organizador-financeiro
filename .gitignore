@@ -24,6 +24,7 @@ MANIFEST
 venv/
 ENV/
 env/
+docs/*.csv
 
 # Alembic
 *.pyc

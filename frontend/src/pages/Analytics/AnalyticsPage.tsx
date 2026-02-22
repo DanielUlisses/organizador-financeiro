@@ -7,7 +7,7 @@ import { SectionHeader } from '@/components/common/SectionHeader'
 import { CHART_THEME, getCategoryColor } from '@/lib/chart-colors'
 import { cn } from '@/lib/utils'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const USER_ID = 1
 const EFFECTIVE_STATUSES = new Set(['processed', 'reconciled'])
 const PLANNED_STATUSES = new Set(['pending', 'scheduled'])

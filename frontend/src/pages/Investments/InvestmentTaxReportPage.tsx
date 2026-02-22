@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { SectionHeader } from '@/components/common/SectionHeader'
 import { ChartCard } from '@/components/common/ChartCard'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '/api')
 const USER_ID = 1
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
