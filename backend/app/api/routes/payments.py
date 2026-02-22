@@ -27,13 +27,22 @@ def get_payments(
     user_id: int,
     payment_type: Optional[PaymentType] = None,
     status: Optional[PaymentStatus] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """Get all payments for a user"""
+    """Get all payments for a user. date_from/date_to filter one-time by due_date; recurring are always included."""
     payments = PaymentService.get_payments_by_user(
-        db, user_id, payment_type=payment_type, status=status, skip=skip, limit=limit
+        db,
+        user_id,
+        payment_type=payment_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        skip=skip,
+        limit=limit,
     )
     return payments
 
@@ -85,18 +94,42 @@ def delete_payment(payment_id: int, user_id: int, db: Session = Depends(get_db))
 
 # Payment Occurrences
 
+@router.get("/occurrences-in-range", response_model=List[PaymentOccurrenceResponse])
+def get_occurrences_in_range(
+    user_id: int,
+    date_from: date,
+    date_to: date,
+    status: Optional[PaymentStatus] = None,
+    db: Session = Depends(get_db)
+):
+    """Get all payment occurrences for the user in the given date range (single query, avoids N+1)."""
+    occurrences = PaymentService.get_occurrences_in_range(
+        db, user_id, date_from=date_from, date_to=date_to, status=status
+    )
+    return occurrences
+
+
 @router.get("/{payment_id}/occurrences", response_model=List[PaymentOccurrenceResponse])
 def get_payment_occurrences(
     payment_id: int,
     user_id: int,
     status: Optional[PaymentStatus] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """Get all occurrences for a payment"""
+    """Get all occurrences for a payment, optionally filtered by scheduled_date range."""
     occurrences = PaymentService.get_payment_occurrences(
-        db, payment_id, user_id, status=status, skip=skip, limit=limit
+        db,
+        payment_id,
+        user_id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        skip=skip,
+        limit=limit,
     )
     return occurrences
 

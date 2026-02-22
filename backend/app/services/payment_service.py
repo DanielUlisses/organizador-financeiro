@@ -42,17 +42,55 @@ class PaymentService:
         user_id: int,
         payment_type: Optional[PaymentType] = None,
         status: Optional[PaymentStatus] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
         skip: int = 0,
         limit: int = 100
     ) -> List[Payment]:
-        """Get all payments for a user with optional filters"""
+        """Get all payments for a user with optional filters.
+        When date_from/date_to are set: one-time payments are filtered by due_date in range;
+        recurring payments are always included (so metadata is available for occurrence merge).
+        """
         query = db.query(Payment).filter(Payment.user_id == user_id)
-        
+
         if payment_type:
             query = query.filter(Payment.payment_type == payment_type)
         if status:
             query = query.filter(Payment.status == status)
-        
+        if date_from is not None or date_to is not None:
+            # One-time: due_date in range; recurring: no date filter (include all)
+            if date_from is not None and date_to is not None:
+                query = query.filter(
+                    or_(
+                        and_(
+                            Payment.payment_type == PaymentType.ONE_TIME,
+                            Payment.due_date >= date_from,
+                            Payment.due_date <= date_to,
+                        ),
+                        Payment.payment_type == PaymentType.RECURRING,
+                    )
+                )
+            elif date_from is not None:
+                query = query.filter(
+                    or_(
+                        and_(
+                            Payment.payment_type == PaymentType.ONE_TIME,
+                            Payment.due_date >= date_from,
+                        ),
+                        Payment.payment_type == PaymentType.RECURRING,
+                    )
+                )
+            else:
+                query = query.filter(
+                    or_(
+                        and_(
+                            Payment.payment_type == PaymentType.ONE_TIME,
+                            Payment.due_date <= date_to,
+                        ),
+                        Payment.payment_type == PaymentType.RECURRING,
+                    )
+                )
+
         return query.order_by(Payment.created_at.desc(), Payment.id.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
@@ -197,27 +235,55 @@ class PaymentService:
         payment_id: int,
         user_id: int,
         status: Optional[PaymentStatus] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
         skip: int = 0,
         limit: int = 100
     ) -> List[PaymentOccurrence]:
-        """Get all occurrences for a payment"""
+        """Get all occurrences for a payment, optionally filtered by scheduled_date range."""
         # Verify payment belongs to user
         payment = db.query(Payment).filter(
             Payment.id == payment_id,
             Payment.user_id == user_id
         ).first()
-        
+
         if not payment:
             return []
-        
+
         query = db.query(PaymentOccurrence).filter(
             PaymentOccurrence.payment_id == payment_id
         )
-        
+
         if status:
             query = query.filter(PaymentOccurrence.status == status)
-        
+        if date_from is not None:
+            query = query.filter(PaymentOccurrence.scheduled_date >= date_from)
+        if date_to is not None:
+            query = query.filter(PaymentOccurrence.scheduled_date <= date_to)
+
         return query.order_by(PaymentOccurrence.scheduled_date).offset(skip).limit(limit).all()
+
+    @staticmethod
+    def get_occurrences_in_range(
+        db: Session,
+        user_id: int,
+        date_from: date,
+        date_to: date,
+        status: Optional[PaymentStatus] = None,
+    ) -> List[PaymentOccurrence]:
+        """Get all payment occurrences for the user in the given date range (single query, no N+1)."""
+        query = (
+            db.query(PaymentOccurrence)
+            .join(Payment, PaymentOccurrence.payment_id == Payment.id)
+            .filter(
+                Payment.user_id == user_id,
+                PaymentOccurrence.scheduled_date >= date_from,
+                PaymentOccurrence.scheduled_date <= date_to,
+            )
+        )
+        if status is not None:
+            query = query.filter(PaymentOccurrence.status == status)
+        return query.order_by(PaymentOccurrence.scheduled_date).all()
 
     @staticmethod
     def create_payment_occurrence(

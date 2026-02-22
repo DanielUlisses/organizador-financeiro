@@ -110,7 +110,18 @@ export function AccountsPage() {
     color: '#6366F1',
   })
 
+  const getPaymentsDateRange = () => {
+    const now = new Date()
+    const dateTo = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const dateFrom = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+    return {
+      date_from: `${dateFrom.getFullYear()}-${String(dateFrom.getMonth() + 1).padStart(2, '0')}-${String(dateFrom.getDate()).padStart(2, '0')}`,
+      date_to: `${dateTo.getFullYear()}-${String(dateTo.getMonth() + 1).padStart(2, '0')}-${String(dateTo.getDate()).padStart(2, '0')}`,
+    }
+  }
+
   const fetchAllPayments = async () => {
+    const { date_from, date_to } = getPaymentsDateRange()
     const pageSize = 500
     let skip = 0
     const all: Array<{
@@ -132,7 +143,14 @@ export function AccountsPage() {
     }> = []
 
     while (true) {
-      const response = await fetch(`${API_BASE_URL}/payments?user_id=${USER_ID}&skip=${skip}&limit=${pageSize}`)
+      const params = new URLSearchParams({
+        user_id: String(USER_ID),
+        skip: String(skip),
+        limit: String(pageSize),
+        date_from,
+        date_to,
+      })
+      const response = await fetch(`${API_BASE_URL}/payments?${params}`)
       if (!response.ok) throw new Error('Failed to load account statement data.')
       const chunk = (await response.json()) as Array<{
         id: number
@@ -169,11 +187,15 @@ export function AccountsPage() {
     setError(null)
     setNotice(null)
     try {
-      const [accountsRes, rawPayments, categoriesRes, tagsRes] = await Promise.all([
+      const { date_from, date_to } = getPaymentsDateRange()
+      const [accountsRes, rawPayments, categoriesRes, tagsRes, occurrencesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/bank-accounts?user_id=${USER_ID}`),
         fetchAllPayments(),
         fetch(`${API_BASE_URL}/transaction-metadata/categories?user_id=${USER_ID}`),
         fetch(`${API_BASE_URL}/transaction-metadata/tags?user_id=${USER_ID}`),
+        fetch(
+          `${API_BASE_URL}/payments/occurrences-in-range?user_id=${USER_ID}&date_from=${date_from}&date_to=${date_to}`,
+        ),
       ])
 
       if (!accountsRes.ok || !categoriesRes.ok || !tagsRes.ok) {
@@ -203,16 +225,21 @@ export function AccountsPage() {
       setAccounts(accountData)
       setSelectedAccountId((current) => current ?? accountData[0]?.id ?? null)
 
-      const recurringPayments = rawPayments.filter((payment) => payment.payment_type === 'recurring')
-      const occurrenceResponses = await Promise.all(
-        recurringPayments.map(async (payment) => {
-          const response = await fetch(`${API_BASE_URL}/payments/${payment.id}/occurrences?user_id=${USER_ID}&limit=500`)
-          if (!response.ok) return { paymentId: payment.id, occurrences: [] as Array<{ id: number; scheduled_date: string; amount: unknown; status?: string; notes?: string }> }
-          const occurrences = (await response.json()) as Array<{ id: number; scheduled_date: string; amount: unknown; status?: string; notes?: string }>
-          return { paymentId: payment.id, occurrences }
-        }),
-      )
-      const recurringByPaymentId = new Map(occurrenceResponses.map((entry) => [entry.paymentId, entry.occurrences]))
+      const allOccurrences = occurrencesRes.ok
+        ? ((await occurrencesRes.json()) as Array<{ id: number; payment_id: number; scheduled_date: string; amount: unknown; status?: string; notes?: string }>)
+        : []
+      const recurringByPaymentId = new Map<number, Array<{ id: number; scheduled_date: string; amount: unknown; status?: string; notes?: string }>>()
+      for (const occ of allOccurrences) {
+        const list = recurringByPaymentId.get(occ.payment_id) ?? []
+        list.push({
+          id: occ.id,
+          scheduled_date: occ.scheduled_date,
+          amount: occ.amount,
+          status: occ.status,
+          notes: occ.notes,
+        })
+        recurringByPaymentId.set(occ.payment_id, list)
+      }
 
       const flattenedPayments: PaymentRow[] = []
       for (const payment of rawPayments) {
