@@ -110,18 +110,21 @@ export function AccountsPage() {
     color: '#6366F1',
   })
 
-  const getPaymentsDateRange = () => {
-    const now = new Date()
-    const dateTo = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    const dateFrom = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+  const getPaymentsDateRange = (month: Date) => {
+    const y = month.getFullYear()
+    const m = month.getMonth()
+    const dateTo = new Date(y, m + 1, 0)
+    // Fixed start (10 years back) so carry-over balance is consistent when switching months.
+    // Otherwise e.g. Jan loads Feb–Jan and Feb loads Mar–Feb, so Feb’s “opening” uses a different baseline than Jan’s closing.
+    const dateFrom = new Date(y - 10, 0, 1)
     return {
       date_from: `${dateFrom.getFullYear()}-${String(dateFrom.getMonth() + 1).padStart(2, '0')}-${String(dateFrom.getDate()).padStart(2, '0')}`,
       date_to: `${dateTo.getFullYear()}-${String(dateTo.getMonth() + 1).padStart(2, '0')}-${String(dateTo.getDate()).padStart(2, '0')}`,
     }
   }
 
-  const fetchAllPayments = async () => {
-    const { date_from, date_to } = getPaymentsDateRange()
+  const fetchAllPayments = async (month: Date) => {
+    const { date_from, date_to } = getPaymentsDateRange(month)
     const pageSize = 500
     let skip = 0
     const all: Array<{
@@ -187,10 +190,10 @@ export function AccountsPage() {
     setError(null)
     setNotice(null)
     try {
-      const { date_from, date_to } = getPaymentsDateRange()
+      const { date_from, date_to } = getPaymentsDateRange(currentMonth)
       const [accountsRes, rawPayments, categoriesRes, tagsRes, occurrencesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/bank-accounts?user_id=${USER_ID}`),
-        fetchAllPayments(),
+        fetchAllPayments(currentMonth),
         fetch(`${API_BASE_URL}/transaction-metadata/categories?user_id=${USER_ID}`),
         fetch(`${API_BASE_URL}/transaction-metadata/tags?user_id=${USER_ID}`),
         fetch(
@@ -309,7 +312,7 @@ export function AccountsPage() {
 
   useEffect(() => {
     void loadData()
-  }, [])
+  }, [currentMonth.getFullYear(), currentMonth.getMonth()])
 
   useEffect(() => {
     const handler = () => {
